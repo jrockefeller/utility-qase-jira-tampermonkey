@@ -516,7 +516,7 @@ GM_addStyle(`
                 if (existing) existing.remove();
 
                 // associate Jira issue with run ID here
-                // associateRunWithJira(projectCode, data.result.id);
+                associateRunWithJira(projectCode, data.result.id);
             }
         });
     }
