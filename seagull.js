@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Jira Qase Scrape and Run
 // @namespace    http://tampermonkey.net/
-// @version      1.1.3
+// @version      1.1.4
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -43,6 +43,8 @@ GM_addStyle(`
 
 (function () {
     'use strict';
+
+    alert('congrats. you updated')
 
     // == Utilities ==
     function getToken() {
