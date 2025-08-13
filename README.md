@@ -1,13 +1,12 @@
 # 🐙 Qase - Jira - Tampermonkey
 
 A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and linked test cases from Jira issue pages — then builds a test run on Qase, associating it back to the Jira issue.  
-Think of it as "Squashing" your Qase chaos. 🐙⚡
 
 ---
 
 ## 📦 What It Does
 
-- Adds a **"Jrocks Jamboree"** button to your Jira issue pages.
+- Adds a **"✈️ Aviator"** button to your Jira issue pages.
 - Scrapes all `https://app.qase.io/plan/PROJECT/ID` links from the page text and links.
 - Fetches the associated Qase test plan names and test case IDs.
 - Grabs any Qase cases linked to the Jira issue via the API.
@@ -29,7 +28,7 @@ Think of it as "Squashing" your Qase chaos. 🐙⚡
 3. Copy contents of script.
 4. Update with your tokens.
 5. Save.
-6. Reload your Jira issue page — you'll see a **"Jrocks Jamboree"** button next to the **Create** button.
+6. Reload your Jira issue page — you'll see a **"✈️ Aviator"** button next to the **Create** button.
 
 ```javascript
 // ==UserScript==

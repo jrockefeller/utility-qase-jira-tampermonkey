@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Jira Qase Scrape and Run
+// @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1.6
+// @version      1.1.7
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -420,7 +420,7 @@ GM_addStyle(`
         /** function: creates button to attach to jira page */
         const createButton = () => {
             const btn = document.createElement('button');
-            btn.textContent = "🧪 Jrock's Jamboree";
+            btn.textContent = "✈️ Aviator";
             btn.id = 'qaseScrapeButton';
             btn.style = `
             background: ${isDarkMode ? '#8fb8f6' : 'white'};
