@@ -354,7 +354,7 @@ GM_addStyle(`
     /** trigger selected teamcity builds */
     async function triggerTeamCityBuilds(runId) {
 
-        const token = window.aviator.teamcity.token;
+        const token = window.aviator?.teamcity?.token;
         const cfsrToken = await getTeamCityCsrfToken(token)
         const builds = document.querySelectorAll('.teamcity-build:checked');
 
@@ -389,7 +389,7 @@ GM_addStyle(`
     }
 
     async function fetchTeamCityBuildDetails(buildId) {
-        const token = window.aviator.teamcity.token;
+        const token = window.aviator?.teamcity?.token;
         const cfsrToken = await getTeamCityCsrfToken(token)
 
         return new Promise(resolve => {
@@ -565,8 +565,8 @@ GM_addStyle(`
         const externalCases = issueKey
             ? await fetchQaseTestCases(plans[0]?.projectCode || projectCode, issueKey)
             : [];
-        const tcBuildDetails = window.aviator.teamcity.builds
-            ? await Promise.all(window.aviator.teamcity.builds.map(m => fetchTeamCityBuildDetails(m)))
+        const tcBuildDetails = window.aviator?.teamcity?.builds
+            ? await Promise.all(window.aviator?.teamcity?.builds.map(m => fetchTeamCityBuildDetails(m)))
             : [];
 
         hideLoading();
