@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1.7
+// @version      1.1.8
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -46,7 +46,7 @@ GM_addStyle(`
 
     // == Utilities ==
     function getQaseApiToken() {
-        return window.seagull.qase.token;
+        return window.aviator.qase.token;
     }
 
     function checkQaseApiToken() {
@@ -59,7 +59,7 @@ GM_addStyle(`
     }
 
     function getQaseProjectCode() {
-        return window.seagull.qase.projectCode;
+        return window.aviator.qase.projectCode;
     }
 
     function checkQaseProjectCode() {
@@ -133,7 +133,7 @@ GM_addStyle(`
     }
 
     function generateTitlePlaceholder(issueKey) {
-        let title = window.seagull.qase.title ?? issueKey
+        let title = window.aviator.qase.title ?? issueKey
 
         title = title.replace('{issueKey}', issueKey);
 
@@ -354,7 +354,7 @@ GM_addStyle(`
     /** trigger selected teamcity builds */
     async function triggerTeamCityBuilds(runId) {
 
-        const token = window.seagull.teamcity.token;
+        const token = window.aviator.teamcity.token;
         const cfsrToken = await getTeamCityCsrfToken(token)
         const builds = document.querySelectorAll('.teamcity-build:checked');
 
@@ -389,7 +389,7 @@ GM_addStyle(`
     }
 
     async function fetchTeamCityBuildDetails(buildId) {
-        const token = window.seagull.teamcity.token;
+        const token = window.aviator.teamcity.token;
         const cfsrToken = await getTeamCityCsrfToken(token)
 
         return new Promise(resolve => {
@@ -565,8 +565,8 @@ GM_addStyle(`
         const externalCases = issueKey
             ? await fetchQaseTestCases(plans[0]?.projectCode || projectCode, issueKey)
             : [];
-        const tcBuildDetails = window.seagull.teamcity.builds
-            ? await Promise.all(window.seagull.teamcity.builds.map(m => fetchTeamCityBuildDetails(m)))
+        const tcBuildDetails = window.aviator.teamcity.builds
+            ? await Promise.all(window.aviator.teamcity.builds.map(m => fetchTeamCityBuildDetails(m)))
             : [];
 
         hideLoading();

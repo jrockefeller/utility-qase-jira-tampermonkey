@@ -32,7 +32,7 @@ A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and 
 
 ```javascript
 // ==UserScript==
-// @name         Seagull
+// @name         aviator
 // @namespace    http://tampermonkey.net/
 // @version      1.1.3
 // @description  Scrape Qase plans + cases from Jira page and build test runs
@@ -41,13 +41,13 @@ A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and 
 // @grant        GM_addStyle
 // @connect      api.qase.io
 // @connect      ci.paylocity.com
-// @require      https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/refs/heads/main/seagull.js
+// @require      https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/refs/heads/main/aviator.js
 // ==/UserScript==
 
 
 (() => {
     // Local config or secrets — these are **not** exposed in the @require file
-    window.seagull = {
+    window.aviator = {
         qase: {
             token: 'YOUR_QASE_PERSONAL_ACCESS_TOKEN',
             projectCode: 'YOUR_PROJECT_CODE'
