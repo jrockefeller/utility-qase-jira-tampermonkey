@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1.8
+// @version      1.1.9
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -132,12 +132,26 @@ GM_addStyle(`
         if (overlay) overlay.remove();
     }
 
-    function generateTitlePlaceholder(issueKey) {
-        let title = window.aviator.qase.title ?? issueKey
+    function generateTitlePlaceholder() {
+        const jiraDetails = getJiraIssueDetails()
+        let title = window.aviator.qase.title ?? jiraDetails.issueKey
 
-        title = title.replace('{issueKey}', issueKey);
+        title = title.replace('{issueKey}', jiraDetails.issueKey);
+        title = title.replace('{issueTitle}', jiraDetails.issueTitle);
 
         return title;
+    }
+
+    function getJiraIssueDetails() {
+        let issueKey = null;
+        const matchFromPath = window.location.pathname.match(/\/browse\/([A-Z]+-\d+)/i);
+        if (matchFromPath) issueKey = matchFromPath[1];
+
+        let issueTitle = null;
+        const titleFromJira = document.querySelector('[data-testid="issue.views.issue-base.foundation.summary.heading"]');
+        if(titleFromJira) issueTitle = titleFromJira.innerText
+
+        return {issueKey, issueTitle}
     }
 
     // == Qase Functions ==

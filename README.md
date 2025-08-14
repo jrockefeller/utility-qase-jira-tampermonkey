@@ -20,15 +20,22 @@ A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and 
 - Reloads the Jira page with success feedback.
 
 ---
-
 ## 🖥️ Install via Tampermonkey
 
 1. Install Tampermonkey: https://www.tampermonkey.net/
-2. Create a new script.
-3. Copy contents of script.
-4. Update with your tokens.
+    **Enable Extenstion Settings**
+    - Go to `chrome://extensions/`.
+    - Enable the **Developer mode** toggle (top right).
+    - Locate **Tampermonkey**, click **Details**.
+    - Scroll down and ensure that **Allow User Scripts** is enabled.
+2. Open TamperMonkey > Create a new script.
+3. Copy contents of user script below.
+4. Update with your tokens (see sections to generate tokens).
 5. Save.
-6. Reload your Jira issue page — you'll see a **"✈️ Aviator"** button next to the **Create** button.
+6. Load a selected Jira Issue — you'll see a **"✈️ Aviator"** button.
+    - Selected issue on board — top of modal.
+    - Selected issue on backlog — top of issue pane.
+    - Issue in own page — next to the **Create** button.
 
 ```javascript
 // ==UserScript==
@@ -43,7 +50,6 @@ A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and 
 // @connect      ci.paylocity.com
 // @require      https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/refs/heads/main/aviator.js
 // ==/UserScript==
-
 
 (() => {
     // Local config or secrets — these are **not** exposed in the @require file
@@ -65,33 +71,104 @@ A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and 
 })();
 ```
 
+# Aviator Configuration
+
+The script reads its configuration from the global `window.aviator` object.
+
 ---
 
-## 🛠️ Developer Mode Setup
+## 📋 Required Variables Summary
 
-To ensure the script runs correctly in development environments:
+| Section   | Property       | Required | Description |
+|-----------|----------------|----------|-------------|
+| **qase**  | `token`        | ✅       | API token for authenticating with Qase. |
+| **qase**  | `projectCode`  | ✅       | Project code in Qase (e.g., `DEMOS`). |
+| **qase**  | `title`        | ❌       | Custom run title template with token substitution. |
+| **teamcity** | `token`     | ❌       | API token for authenticating with TeamCity (only required if using TeamCity integration). |
+| **teamcity** | `builds`    | ❌       | Array of TeamCity configuration build IDs to trigger. |
 
-### Enable Extension Settings (Chrome)
+---
 
-1. Go to `chrome://extensions/`.
-2. Enable the **Developer mode** toggle (top right).
-3. Locate **Tampermonkey**, click **Details**.
-4. Scroll down and ensure that **Allow User Scripts** is enabled.
+### **`qase`** (Required)
+Configuration for Qase test management integration.
 
-> These settings help ensure Tampermonkey can interact fully with Jira and Qase in a local or dev setup.
 
+| Property      | Type   | Required | Description |
+|---------------|--------|----------|-------------|
+| `token`       | string | ✅       | API token for authenticating with Qase. |
+| `projectCode` | string | ✅       | Project code in Qase (e.g., `DEMOS`). |
+| `title`       | string | ❌       | Optional run title template. Supports token substitution (see **Title Tokens** below). If omitted, a default title is used. |
+
+**Title Tokens**
+| Token          | Replaced With    |
+|----------------|------------------|
+| `{issueKey}`   | Jira issue key   |
+| `{issueTitle}` | Jira issue title |
+
+**Example – Qase only**
+```javascript
+window.aviator = {
+    qase: {
+        token: 'your-qase-api-token',
+        projectCode: 'DEMOS'
+    }
+};
+```
+**Example – Qase with custom title**
+```javascript
+window.aviator = {
+    qase: {
+        token: 'your-qase-api-token',
+        projectCode: 'DEMOS',
+        title: '{issueKey} Smoke Tests - {issueTitle}'
+    }
+};
+```
+---
+
+### **`teamcity`** (Optional)
+Configuration for triggering TeamCity builds.
+
+| Property       | Type     | Required | Description |
+|----------------|----------|----------|-------------|
+| `token`        | string   | ❌       | API token for authenticating with TeamCity. Required only if using TeamCity integration. |
+| `builds`       | string[] | ❌       | List of TeamCity configuration build IDs to trigger. Example: `["Cypress_SampleProject_TinSingleTestExample"]`. |
+
+**Example – Qase + TeamCity**
+```javascript
+window.aviator = {
+    qase: {
+        token: 'your-qase-api-token',
+        projectCode: 'DEMOS'
+    },
+    teamcity: {
+        token: 'your-teamcity-api-token',
+        builds: [
+            'Cypress_SampleProject_TinSingleTestExample',
+            'Cypress_SampleProject_AnotherBuild'
+        ]
+    }
+};
+```
 ---
 
 ## 📝 Update Required Variables to Run
 
 Script needs Qase API token and Project Code to run:
-
 ### Qase Setup
 - Generate a `personal access token` in Qase.
+    - Click profile icon (upper right corner).
+    - Select `Profile` link
+    - Select `API Tokens` link
+    - Create a new API token
 - Replace `YOUR_QASE_PERSONAL_ACCESS_TOKEN` with your Qase token.
 - Replace `YOUR_PROJECT_CODE` with your Qase project code (e.g., "DEMOS").
 
 ### TeamCity Setup (optional)
 - Generate a TeamCity token for API access.
+    - Click profile icon (upper right corner).
+    - Select `Profile` link
+    - Select `Access Tokens` link
+    - Create access token
 - Replace `YOUR_TEAMCITY_TOKEN ` with your Qase token.
 - Add one or more build IDs to the builds array.
