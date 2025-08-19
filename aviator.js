@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1.9
+// @version      1.1.10
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -44,7 +44,7 @@ GM_addStyle(`
 (function () {
     'use strict';
 
-    // == Utilities ==
+    //#region == Utilities ==
     function getQaseApiToken() {
         return window.aviator.qase.token;
     }
@@ -149,12 +149,14 @@ GM_addStyle(`
 
         let issueTitle = null;
         const titleFromJira = document.querySelector('[data-testid="issue.views.issue-base.foundation.summary.heading"]');
-        if(titleFromJira) issueTitle = titleFromJira.innerText
+        if (titleFromJira) issueTitle = titleFromJira.innerText
 
-        return {issueKey, issueTitle}
+        return { issueKey, issueTitle }
     }
 
-    // == Qase Functions ==
+    //#endregion == Utilities ==
+
+    //#region == Qase Functions ==
 
     /** scrapes Qase plan url text found in Jira issue */
     function scrapeQasePlansFromPage() {
@@ -219,12 +221,103 @@ GM_addStyle(`
         });
     }
 
+    function fetchQaseEnvironments() {
+        const token = getQaseApiToken();
+        const projectCode = getQaseProjectCode();
+
+        return new Promise(resolve => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `https://api.qase.io/v1/environment/${projectCode}?limit=100&offset=0`,
+                headers: { 'Accept': 'application/json', 'Token': token },
+                onload: res => {
+                    const data = JSON.parse(res.responseText);
+                    resolve(data.result.entities);
+                }
+            });
+        });
+    }
+
+    function fetchQaseMilestones() {
+        const token = getQaseApiToken();
+        const projectCode = getQaseProjectCode();
+
+        return new Promise(resolve => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `https://api.qase.io/v1/milestone/${projectCode}?limit=10&offset=00`,
+                headers: { 'Accept': 'application/json', 'Token': token },
+                onload: res => {
+                    const data = JSON.parse(res.responseText);
+                    resolve(data.result.entities);
+                }
+            });
+        });
+    }
+
+    function fetchQaseConfigurations() {
+        const token = getQaseApiToken();
+        const projectCode = getQaseProjectCode();
+
+        return new Promise(resolve => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `https://api.qase.io/v1/configuration/${projectCode}`,
+                headers: { 'Accept': 'application/json', 'Token': token },
+                onload: res => {
+                    const data = JSON.parse(res.responseText);
+                    resolve(data.result.entities);
+                }
+            });
+        });
+    }
+
+    async function fetchQaseTestRunConfig() {
+        const opts = window.aviator.qase?.options;
+
+        const promises = [];
+
+        // Environment
+        if (opts?.environment) {
+            promises.push(fetchQaseEnvironments());
+        } else {
+            promises.push(Promise.resolve(null));
+        }
+
+        // Milestone
+        if (opts?.milestone) {
+            promises.push(fetchQaseMilestones());
+        } else {
+            promises.push(Promise.resolve(null));
+        }
+
+        // Configurations
+        if (opts?.configurations) {
+            promises.push(fetchQaseConfigurations());
+        } else {
+            promises.push(Promise.resolve(null));
+        }
+
+        const [environments, milestones, configurations] = await Promise.all(promises);
+
+        return { environments, milestones, configurations };
+    }
+
     /** calls Qase Api to create test run with selected plan tests and associated tests
      * returns runId
     */
-    function createQaseTestRun() {
+    async function createQaseTestRun() {
         const projectCode = getQaseProjectCode();
         const token = getQaseApiToken();
+
+        const environmentId = document.getElementById('qaseEnv')?.value || null;
+        const milestoneId = document.getElementById('qaseMilestone')?.value || null;
+
+        const configSelections = Array.from(document.querySelectorAll('.qaseConfig'))
+            .reduce((acc, sel) => {
+                if (sel.value) acc[sel.getAttribute('data-entity-id')] = parseInt(sel.value, 10);
+                return acc;
+            }, {});
 
         const selected = document.querySelectorAll('.qase-item:checked');
         const allCaseIds = [];
@@ -239,45 +332,54 @@ GM_addStyle(`
             return;
         }
 
-        const runTitle = document.getElementById('qaseRunTitle').value.trim() || '';
-
-        if (runTitle === '') {
+        const runTitle = document.getElementById('qaseRunTitle').value.trim();
+        if (!runTitle) {
             alert('No test run title entered!');
             return;
         }
 
-        const options = {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Token': token
-            },
-            body: JSON.stringify({ title: runTitle, cases: allCaseIds })
+        const payload = {
+            title: runTitle,
+            cases: allCaseIds,
+            environment_id: environmentId,
+            milestone_id: milestoneId,
+            configurations: configSelections
         };
 
-        GM_xmlhttpRequest({
-            method: 'POST',
-            url: `https://api.qase.io/v1/run/${projectCode}`,
-            headers: options.headers,
-            data: options.body,
-            onload: async (res) => {
-                const data = JSON.parse(res.responseText);
-                console.log(`Qase: Test Run Created: ${data.result.id}`);
+        try {
+            const runData = await new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: `https://api.qase.io/v1/run/${projectCode}`,
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'Token': token
+                    },
+                    data: JSON.stringify(payload),
+                    onload: res => resolve(JSON.parse(res.responseText)),
+                    onerror: err => reject(err)
+                });
+            });
 
-                // trigger any selected teamcity builds
-                await triggerTeamCityBuilds(data.result.id);
+            console.log(`Qase: Test Run Created: ${runData.result.id}`);
 
-                // remove UI popup
-                document.getElementById('qasePopup').remove();
-                const existing = document.getElementById('qasePopupOverlay');
-                if (existing) existing.remove();
+            // Trigger any TeamCity builds
+            await triggerTeamCityBuilds(runData.result.id);
 
-                // associate Jira issue with run ID here
-                associateQaseTestRunWithJira(projectCode, data.result.id);
-            }
-        });
+            // Associate with Jira AFTER run is confirmed created
+            await associateQaseTestRunWithJira(projectCode, runData.result.id);
+
+            // Remove popup after everything is done
+            const overlay = document.getElementById('qasePopupOverlay');
+            if (overlay) overlay.remove();
+
+        } catch (err) {
+            console.error('Error creating test run:', err);
+            alert('Failed to create Qase test run. See console for details.');
+        }
     }
+
 
     /** Associate the newly created test run to the ticket
      * add Qase: Test runs section in UI
@@ -345,7 +447,9 @@ GM_addStyle(`
         });
     }
 
-    // == TeamCity Functions ==
+    //#endregion Qase Functions
+
+    //#region == TeamCity Functions ==
 
     /** calls TeamCity to get csrf token needed to communiticate for auth */
     async function getTeamCityCsrfToken(token) {
@@ -388,7 +492,8 @@ GM_addStyle(`
                     buildType: { id: buildId },
                     properties: {
                         property: [
-                            { name: "env.QASE_RUN_ID", value: runId }
+                            { name: "env.QASE_TESTOPS_RUN_ID", value: runId },
+                            { name: "env.QASE_TESTOPS_RUN_COMPLETE", value: 'false' },
                         ]
                     }
                 }),
@@ -424,6 +529,8 @@ GM_addStyle(`
             });
         });
     }
+
+    //#endregion TeamCity Functions
 
     // == UI Pieces ==
 
@@ -583,14 +690,16 @@ GM_addStyle(`
             ? await Promise.all(window.aviator?.teamcity?.builds.map(m => fetchTeamCityBuildDetails(m)))
             : [];
 
+        const qaseConfigData = await fetchQaseTestRunConfig()
+
         hideLoading();
-        showPopup(issueKey, planDetails, externalCases, tcBuildDetails);
+        showPopup(issueKey, planDetails, externalCases, qaseConfigData, tcBuildDetails);
     }
 
     /** present popup UI
      * on submit calls createQaseTestRun()
     */
-    function showPopup(issueKey, plans, externalCases, tcBuildDetails) {
+    function showPopup(issueKey, plans, externalCases, qaseConfigData, tcBuildDetails) {
         const existing = document.getElementById('qasePopupOverlay');
         if (existing) existing.remove();
 
@@ -632,42 +741,90 @@ GM_addStyle(`
             <h2>Create Test Run</h2>
             <p>Select combination of test plans and cases to create a test run in Qase and associate to this ticket.</p>
         </div>
-        <div style="margin-bottom:16px;">
-            <label style="font-weight:bold; display:block; margin-bottom:4px;">Test Run Title</label>
-            <input type="text" id="qaseRunTitle" value="${titlePlaceholder}" style="width:98%; padding:8px; border:1px solid #ccc; border-radius:4px;">
-        </div>
+        <h3 style="margin-top:16px;margin-bottom:10px;">⚙️ Test Run Configuration</h3>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <!-- Test Run Title spans both columns -->
+            <div style="grid-column: 1 / -1;">
+                <label for="qaseRunTitle" style="font-weight:bold; display:block; margin-bottom:4px;">Test Run Title</label>
+                <input type="text" id="qaseRunTitle" value="" 
+                    style="width:99%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            </div>
     `;
 
-        // add Qase Test Plans section if any exist in Jira item
+        // Environment dropdown
+        if (qaseConfigData.environments) {
+            html += `
+        <div>
+            <label style="font-weight:bold; display:block; margin-bottom:4px;">Environment</label>
+            <select id="qaseEnv" style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px;">
+                <option value=""></option>
+                ${qaseConfigData.environments.map(env => `<option value="${env.id}">${env.title}</option>`).join('')}
+            </select>
+        </div>`;
+        }
+
+        // Milestone dropdown
+        if (qaseConfigData.milestones) {
+            html += `
+        <div>
+            <label style="font-weight:bold; display:block; margin-bottom:4px;">Milestone</label>
+            <select id="qaseMilestone" style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px;">
+                <option value=""></option>
+                ${qaseConfigData.milestones.map(ms => `<option value="${ms.id}">${ms.title}</option>`).join('')}
+            </select>
+        </div>`;
+        }
+
+        // Dynamic Configurations
+        if (qaseConfigData.configurations) {
+            qaseConfigData.configurations.forEach(entity => {
+                html += `
+            <div>
+                <label style="font-weight:bold; display:block; margin-bottom:4px;">${entity.title}</label>
+                <select class="qaseConfig" data-entity-id="${entity.id}" 
+                    style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px;">
+                    <option value=""></option>
+                    ${entity.configurations.map(cfg => `<option value="${cfg.id}">${cfg.title}</option>`).join('')}
+                </select>
+            </div>`;
+            });
+        }
+
+        // Close grid
+        html += `</div>`;
+
+        // Linked Test Plans
         if (plans.length) {
             html += `<h3 style="margin-top:16px;margin-bottom:10px;">📦 Linked Test Plans</h3>`;
             plans.forEach((p) => {
                 html += `<label style="display:block; margin-bottom:8px;">
                 <input type="checkbox" class="qase-item" data-type="plan" data-ids="${p.caseIds.join(',')}">
                 <strong>${p.title}</strong> <span style="color:#555;">(${p.caseIds.length} Case${p.caseIds.length === 1 ? '' : 's'})</span>
-             </label>`;
+            </label>`;
             });
         }
 
-        // add Qase Test Case section if any exist in Jira item
+        // Linked Test Cases
         if (externalCases.length) {
             html += `<h3 style="margin-top:16px;margin-bottom:10px;">🔗 Linked Test Cases</h3>`;
             externalCases.forEach(item => {
                 html += `<label style="display:block; margin-bottom:6px;">
                 <input type="checkbox" class="qase-item" data-type="case" data-ids="${item.id}">#${item.id} - ${item.title}
-             </label>`;
+            </label>`;
             });
         }
 
-        // add Teamcity Build section if any exist in configuration object
+        // TeamCity Builds
         if (tcBuildDetails.length) {
             html += `<h3 style="margin-top:16px;margin-bottom:10px;">🚀 TeamCity Builds</h3>`;
             tcBuildDetails.forEach(build => {
                 html += `<label style="display:block; margin-bottom:6px;">
                 <input type="checkbox" class="teamcity-build" data-id="${build.id}">${build.name} (${build.projectName})
-                </label>`;
-            })
+            </label>`;
+            });
         }
+
+
 
         html += `
         <div style="margin-top:20px; display: flex; justify-content: space-between; align-items: center;">
@@ -683,9 +840,37 @@ GM_addStyle(`
         overlay.appendChild(container);
         document.body.appendChild(overlay);
 
-        document.getElementById('qaseRunBtn').onclick = () => createQaseTestRun();
+        document.getElementById('qaseRunTitle').value = titlePlaceholder
+
+        // Handle Create Test Run click
+        document.getElementById('qaseRunBtn').onclick = async () => {
+            const selected = document.querySelectorAll('.qase-item:checked');
+            if (selected.length === 0) {
+                alert('No test cases selected!');
+                return; // popup stays open
+            }
+
+            try {
+                // Show full-page loading overlay
+                showLoading('Creating Test Run...');
+
+                // Call your async function
+                await createQaseTestRun();
+
+                // Close popup and loading overlay when done
+                const overlay = document.getElementById('qasePopupOverlay');
+                if (overlay) overlay.remove();
+                hideLoading();
+            } catch (err) {
+                console.error('Error creating test run:', err);
+                hideLoading();
+                alert('Failed to create Test Run. See console for details.');
+            }
+        };
+
         document.getElementById('qaseCancelBtn').onclick = () => overlay.remove();
 
+        // Toggle all checkboxes
         const toggleBtn = document.getElementById('qaseToggleAllBtn');
         let allSelected = false;
         toggleBtn.onclick = () => {

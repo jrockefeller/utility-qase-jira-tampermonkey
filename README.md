@@ -84,6 +84,7 @@ The script reads its configuration from the global `window.aviator` object.
 | **qase**  | `token`        | ✅       | API token for authenticating with Qase. |
 | **qase**  | `projectCode`  | ✅       | Project code in Qase (e.g., `DEMOS`). |
 | **qase**  | `title`        | ❌       | Custom run title template with token substitution. |
+| **qase**  | `options`        | ❌       | Options to display test run options for environment, milestones, configurations. |
 | **teamcity** | `token`     | ❌       | API token for authenticating with TeamCity (only required if using TeamCity integration). |
 | **teamcity** | `builds`    | ❌       | Array of TeamCity configuration build IDs to trigger. |
 
@@ -92,12 +93,15 @@ The script reads its configuration from the global `window.aviator` object.
 ### **`qase`** (Required)
 Configuration for Qase test management integration.
 
-
 | Property      | Type   | Required | Description |
 |---------------|--------|----------|-------------|
 | `token`       | string | ✅       | API token for authenticating with Qase. |
 | `projectCode` | string | ✅       | Project code in Qase (e.g., `DEMOS`). |
 | `title`       | string | ❌       | Optional run title template. Supports token substitution (see **Title Tokens** below). If omitted, a default title is used. |
+| `options.environment` | string | ❌       | Test Run Option. Displays setup Qase Environments. |
+| `options.milestone` | string | ❌       | Test Run Option. Displays setup Qase Milestones. |
+| `options.configurations` | string | ❌       | Test Run Option. Displays setup Qase Test Run Configurations. |
+
 
 **Title Tokens**
 | Token          | Replaced With    |
@@ -121,6 +125,21 @@ window.aviator = {
         token: 'your-qase-api-token',
         projectCode: 'DEMOS',
         title: '{issueKey} Smoke Tests - {issueTitle}'
+    }
+};
+```
+**Example – Qase with options**
+```javascript
+window.aviator = {
+    qase: {
+        token: 'your-qase-api-token',
+        projectCode: 'DEMOS',
+        title: '{issueKey} Smoke Tests - {issueTitle}'
+        options: {
+          environment: true,
+          milestone: false,
+          configurations: true
+        }
     }
 };
 ```
