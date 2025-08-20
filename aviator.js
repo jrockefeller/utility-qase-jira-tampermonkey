@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1.10
+// @version      1.1.11
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -146,6 +146,12 @@ GM_addStyle(`
         let issueKey = null;
         const matchFromPath = window.location.pathname.match(/\/browse\/([A-Z]+-\d+)/i);
         if (matchFromPath) issueKey = matchFromPath[1];
+        else {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (!issueKey && urlParams.has('selectedIssue')) {
+                issueKey = urlParams.get('selectedIssue');
+            }
+        }
 
         let issueTitle = null;
         const titleFromJira = document.querySelector('[data-testid="issue.views.issue-base.foundation.summary.heading"]');
@@ -612,7 +618,7 @@ GM_addStyle(`
         const handleLocationChange = () => {
             const url = window.location.href;
 
-            if (/\/projects\/[^/]+\/boards\/[^/?]+.*[?&]selectedIssue=/.test(url)) {
+            if (/\/projects\/[^\/]+\/boards\/\d+(?:\?.*)?[?&]selectedIssue=/.test(url)) {
                 const interval = setInterval(() => {
                     if (document.querySelector('div#jira-issue-header')) {
                         insertForModal();
@@ -746,7 +752,7 @@ GM_addStyle(`
             <!-- Test Run Title spans both columns -->
             <div style="grid-column: 1 / -1;">
                 <label for="qaseRunTitle" style="font-weight:bold; display:block; margin-bottom:4px;">Test Run Title</label>
-                <input type="text" id="qaseRunTitle" value="" 
+                <input type="text" id="qaseRunTitle" value=""
                     style="width:99%; padding:8px; border:1px solid #ccc; border-radius:4px;">
             </div>
     `;
@@ -781,7 +787,7 @@ GM_addStyle(`
                 html += `
             <div>
                 <label style="font-weight:bold; display:block; margin-bottom:4px;">${entity.title}</label>
-                <select class="qaseConfig" data-entity-id="${entity.id}" 
+                <select class="qaseConfig" data-entity-id="${entity.id}"
                     style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px;">
                     <option value=""></option>
                     ${entity.configurations.map(cfg => `<option value="${cfg.id}">${cfg.title}</option>`).join('')}
