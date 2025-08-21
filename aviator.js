@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1.11
+// @version      1.1.12
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -25,7 +25,7 @@ GM_addStyle(`
         color: #ffffff;
     }
     #qasePopup label {
-        color: #dddddd;
+        color: #f0f0f0;
     }
     #qasePopup button {
         background-color: #333 !important;
@@ -38,11 +38,26 @@ GM_addStyle(`
     #qasePopupOverlay {
         background-color: rgba(0, 0, 0, 0.8) !important;
     }
+    /* Alternating row colors for test cases */
+    #qasePopup .test-case-list > label {
+        display: block;
+        padding: 6px;
+        margin-bottom: 2px;
+        border-radius: 4px;
+        color: #000047; /* always readable */
+    }
+    #qasePopup .test-case-list > label:nth-child(odd)  { background: #E6E6FF; }
+    #qasePopup .test-case-list > label:nth-child(even) { background: #F0F0F0; }
 }
 `);
 
+//  .test-case-list > label:nth-child(odd)  { background: #2a2a2a; }
+//   .test-case-list > label:nth-child(even) { background: #333333; }
+
 (function () {
     'use strict';
+
+    const version = 'v1.1.12'
 
     //#region == Utilities ==
     function getQaseApiToken() {
@@ -744,8 +759,9 @@ GM_addStyle(`
         const titlePlaceholder = generateTitlePlaceholder(issueKey);
         let html = `
         <div style="margin-top:0;margin-bottom:16px;">
-            <h2>Create Test Run</h2>
-            <p>Select combination of test plans and cases to create a test run in Qase and associate to this ticket.</p>
+            <h2>Aviator</h2>
+            <small style="color:#666; font-size:12px;">${version}</small>
+            <p>Create a Test Run in Qase by selecting a combination of test plans and cases.</p>
         </div>
         <h3 style="margin-top:16px;margin-bottom:10px;">⚙️ Test Run Configuration</h3>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -802,22 +818,27 @@ GM_addStyle(`
         // Linked Test Plans
         if (plans.length) {
             html += `<h3 style="margin-top:16px;margin-bottom:10px;">📦 Linked Test Plans</h3>`;
+            html += '<div class="test-case-list">';
             plans.forEach((p) => {
                 html += `<label style="display:block; margin-bottom:8px;">
                 <input type="checkbox" class="qase-item" data-type="plan" data-ids="${p.caseIds.join(',')}">
                 <strong>${p.title}</strong> <span style="color:#555;">(${p.caseIds.length} Case${p.caseIds.length === 1 ? '' : 's'})</span>
             </label>`;
             });
+            html += '</div>'
+
         }
 
         // Linked Test Cases
         if (externalCases.length) {
             html += `<h3 style="margin-top:16px;margin-bottom:10px;">🔗 Linked Test Cases</h3>`;
+            html += '<div class="test-case-list">';
             externalCases.forEach(item => {
                 html += `<label style="display:block; margin-bottom:6px;">
                 <input type="checkbox" class="qase-item" data-type="case" data-ids="${item.id}">#${item.id} - ${item.title}
             </label>`;
             });
+            html += '</div>'
         }
 
         // TeamCity Builds
