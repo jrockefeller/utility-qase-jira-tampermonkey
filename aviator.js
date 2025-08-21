@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1.12
+// @version      1.1.13
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -48,13 +48,23 @@ GM_addStyle(`
     }
     #qasePopup .test-case-list > label:nth-child(odd)  { background: #E6E6FF; }
     #qasePopup .test-case-list > label:nth-child(even) { background: #F0F0F0; }
+
+    #qasePopup input[type="text"],
+   #qasePopup select {
+    font-size: 12px;
+    padding: 3px 5px;
+   }
+   #qasePopup h3 {
+    margin-top: 2px;
+    margin-bottom: 6px;
+   }
 }
 `);
 
 (function () {
     'use strict';
 
-    const version = 'v1.1.12'
+    const version = 'v1.1.13'
 
     //#region == Utilities ==
     function getQaseApiToken() {
@@ -716,48 +726,55 @@ GM_addStyle(`
         const overlay = document.createElement('div');
         overlay.id = 'qasePopupOverlay';
         overlay.style = `
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-            pointerEvents: 'auto' // ensure overlay is interactive
-        `;
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        pointerEvents: 'auto' // ensure overlay is interactive
+    `;
 
         const container = document.createElement('div');
         container.id = 'qasePopup';
         container.style = `
-            background: #fff;
-            padding: 20px 25px;
-            border-radius: 8px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-            max-width: 600px;
-            width: 90%;
-            max-height: 80%;
-            overflow-y: auto;
-            font-family: Arial, sans-serif;
-        `;
+        background: #fff;
+        padding: 20px 25px;
+        border-radius: 8px;
+        box-shadow: rgba(0,0,0,0.3)
+        0px 8px 30px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 90%;
+        display: flex;
+        flex-direction: column;
+        font-family: Arial, sans-serif;
+    `;
 
         const titlePlaceholder = generateTitlePlaceholder(issueKey);
+
+        /** -- header */
         let html = `
-            <div style="margin-top:0;margin-bottom:16px;">
-                <h2>Aviator</h2>
-                <small style="color:#666; font-size:12px;">${version}</small>
-                <p>Create a Test Run in Qase by selecting a combination of test plans and cases.</p>
-            </div>
-            <h3 style="margin-top:16px;margin-bottom:10px;">⚙️ Test Run Configuration</h3>
+        <div style="margin-top:0;margin-bottom:5px;flex: 0 0 auto">
+            <h2>Aviator</h2>
+            <small style="color:#666; font-size:12px;">${version}</small>
+            <p style="margin:0;padding:0">Create a Test Run in Qase by selecting a combination of test plans and cases.</p>
+        </div>`
+
+        /** -- config section */
+        html += `<div style="flex: 0 0 auto;">
+            <h3>⚙️ Test Run Configuration</h3>
             <div>
-                    <label for="qaseRunTitle" style="font-weight:bold; display:block; margin-bottom:4px;">Test Run Title</label>
-                    <input type="text" id="qaseRunTitle" value=""
-                        style="width:99%; padding:8px; border:1px solid #ccc; border-radius:4px;">
-                </div>
-        `;
+                <label for="qaseRunTitle" style="font-weight:bold; display:block; margin-bottom:4px;">Test Run Title</label>
+                <input type="text" id="qaseRunTitle" value=""
+                    style="width:99%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            </div>
+    `;
 
         if (qaseConfigData.environments || qaseConfigData.milestones || qaseConfigData.configurations) {
-            html += '<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">'
+            html += '<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 5px;">'
         }
 
         // Environment dropdown
@@ -803,9 +820,13 @@ GM_addStyle(`
         if (qaseConfigData.environments || qaseConfigData.milestones || qaseConfigData.configurations)
             html += `</div>`;
 
+        html += '</div>' // close config section div
+
+        // scrollable content
+        html += '<div style="flex: 1 1 auto; overflow-y: auto; margin-top: 12px; padding-right: 6px;">'
         // Linked Test Plans
         if (plans.length) {
-            html += `<h3 style="margin-top:16px;margin-bottom:10px;">📦 Linked Test Plans</h3>`;
+            html += `<h3>📦 Linked Test Plans</h3>`;
             html += '<div class="test-case-list">';
             plans.forEach((p) => {
                 html += `<label style="display:block; margin-bottom:8px;">
@@ -819,7 +840,7 @@ GM_addStyle(`
 
         // Linked Test Cases
         if (externalCases.length) {
-            html += `<h3 style="margin-top:16px;margin-bottom:10px;">🔗 Linked Test Cases</h3>`;
+            html += `<h3>🔗 Linked Test Cases</h3>`;
             html += '<div class="test-case-list">';
             externalCases.forEach(item => {
                 html += `<label style="display:block; margin-bottom:6px;">
@@ -831,7 +852,7 @@ GM_addStyle(`
 
         // TeamCity Builds
         if (tcBuildDetails.length) {
-            html += `<h3 style="margin-top:16px;margin-bottom:10px;">🚀 TeamCity Builds</h3>`;
+            html += `<h3>🚀 TeamCity Builds</h3>`;
             tcBuildDetails.forEach(build => {
                 html += `<label style="display:block; margin-bottom:6px;">
                 <input type="checkbox" class="teamcity-build" data-id="${build.id}">${build.name} (${build.projectName})
@@ -839,9 +860,11 @@ GM_addStyle(`
             });
         }
 
-        // footer buttons
+        html += '</div>' // end scrollable content
+
+
         html += `
-        <div style="margin-top:20px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="margin-top:20px; display: flex; justify-content: space-between; align-items: center; flex: 0 0 auto;">
             <button id="qaseToggleAllBtn" style="padding:6px 12px; background:#F4F5F7; border:1px solid #ccc; border-radius:4px; cursor:pointer;">☑️ Select All</button>
             <div>
                 <button id="qaseRunBtn" style="padding:8px 16px; background:#0052CC; color:white; border:none; border-radius:4px; cursor:pointer;">✅ Create Test Run</button>
@@ -853,8 +876,6 @@ GM_addStyle(`
         container.innerHTML = html;
         overlay.appendChild(container);
 
-        // either inject into jira modal for text input issues
-        // or just put on page
         const modalContent = document.querySelector('[role="dialog"], .jira-dialog, .css-1ynzxqw');
         if (modalContent)
             modalContent.appendChild(overlay)
