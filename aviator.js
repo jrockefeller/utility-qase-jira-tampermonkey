@@ -51,9 +51,6 @@ GM_addStyle(`
 }
 `);
 
-//  .test-case-list > label:nth-child(odd)  { background: #2a2a2a; }
-//   .test-case-list > label:nth-child(even) { background: #333333; }
-
 (function () {
     'use strict';
 
@@ -225,13 +222,13 @@ GM_addStyle(`
     }
 
     /** calls Qase Api to get associated jira ticket qase test ids */
-    function fetchQaseTestCases(projectCode, issueId) {
+    function fetchQaseTestCases(projectCode, issueKey) {
         const token = getQaseApiToken();
 
         return new Promise(resolve => {
             GM_xmlhttpRequest({
                 method: 'GET',
-                url: `https://api.qase.io/v1/case/${projectCode}?external_issues[type]=jira-cloud&external_issues[ids][]=${issueId}&limit=50`,
+                url: `https://api.qase.io/v1/case/${projectCode}?external_issues[type]=jira-cloud&external_issues[ids][]=${issueKey}&limit=50`,
                 headers: { 'Accept': 'application/json', 'Token': token },
                 onload: res => {
                     const data = JSON.parse(res.responseText);
@@ -393,7 +390,9 @@ GM_addStyle(`
 
             // Remove popup after everything is done
             const overlay = document.getElementById('qasePopupOverlay');
-            if (overlay) overlay.remove();
+            if (overlay) {
+                overlay.remove();
+            }
 
         } catch (err) {
             console.error('Error creating test run:', err);
@@ -408,16 +407,13 @@ GM_addStyle(`
     function associateQaseTestRunWithJira(projectCode, runId) {
         const token = getQaseApiToken();
 
-        const pathParts = window.location.pathname.split('/');
-        const browseIndex = pathParts.indexOf('browse');
-        const issueId = browseIndex !== -1 && pathParts.length > browseIndex + 1 ? pathParts[browseIndex + 1] : null;
-
-        if (!issueId) {
+        let { issueKey } = getJiraIssueDetails()
+        if (!issueKey) {
             alert('Could not detect Jira issue ID in URL for association.');
             return;
         }
 
-        console.log('Qase: Associating Run ID', runId, 'with Jira issue', issueId);
+        console.log('Qase: Associating Run ID', runId, 'with Jira issue', issueKey);
         showLoading('Associating test run with Jira...');
 
         GM_xmlhttpRequest({
@@ -429,13 +425,13 @@ GM_addStyle(`
             },
             data: JSON.stringify({
                 type: 'jira-cloud',
-                links: [{ run_id: runId, external_issue: issueId }]
+                links: [{ run_id: runId, external_issue: issueKey }]
             }),
             onload: function (response) {
                 hideLoading();
                 try {
                     const res = JSON.parse(response.responseText);
-                    console.log(`Qase: Jira issue ${issueId} successfully associated with Run ID ${runId}.`);
+                    console.log(`Qase: Jira issue ${issueKey} successfully associated with Run ID ${runId}.`);
 
                     // Conditional behavior
                     const qasePanel = document.querySelector('[data-testid="issue-view-ecosystem.connect.content-panel.qase.jira.cloud__qase-runs"]');
@@ -601,9 +597,6 @@ GM_addStyle(`
             justify-content: center;
             gap: 12px;
         `;
-            const label = document.createElement('span');
-            label.textContent = 'Qase Tools:';
-            bar.appendChild(label);
             bar.appendChild(createButton());
             header.parentElement.insertBefore(bar, header);
         };
@@ -649,8 +642,8 @@ GM_addStyle(`
                 }, 500);
             } else if (/\/backlog\?.*selectedIssue=/.test(url)) {
                 const interval = setInterval(() => {
-                    if (document.querySelector('button.issue.fields.status-view.status-button')) {
-                        insertInBacklogSidebar();
+                    if (document.querySelector('div#jira-issue-header')) {
+                        insertForModal();
                         clearInterval(interval);
                     }
                 }, 500);
@@ -686,22 +679,13 @@ GM_addStyle(`
         showLoading('Fetching Qase test data...');
         const plans = scrapeQasePlansFromPage();
 
-        let issueKey = null;
-        const matchFromPath = window.location.pathname.match(/\/browse\/([A-Z]+-\d+)/i);
-        if (matchFromPath) issueKey = matchFromPath[1];
-
-        const urlParams = new URLSearchParams(window.location.search);
-        if (!issueKey && urlParams.has('selectedIssue')) {
-            issueKey = urlParams.get('selectedIssue');
-        }
+        let { issueKey } = getJiraIssueDetails()
 
         if (!plans.length && !issueKey) {
             hideLoading();
             alert('No Qase plans or Jira issue key found.');
             return;
         }
-
-        //console.log('qase: issue key', issueKey)
 
         const planDetails = await Promise.all(plans.map(p => fetchQaseTestPlanDetails(p.projectCode, p.planId)));
         const externalCases = issueKey
@@ -732,46 +716,49 @@ GM_addStyle(`
         const overlay = document.createElement('div');
         overlay.id = 'qasePopupOverlay';
         overlay.style = `
-        position: fixed;
-        top: 0; left: 0;
-        width: 100%; height: 100%;
-        background: rgba(0,0,0,0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-    `;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            pointerEvents: 'auto' // ensure overlay is interactive
+        `;
 
         const container = document.createElement('div');
         container.id = 'qasePopup';
         container.style = `
-        background: #fff;
-        padding: 20px 25px;
-        border-radius: 8px;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-        max-width: 600px;
-        width: 90%;
-        max-height: 80%;
-        overflow-y: auto;
-        font-family: Arial, sans-serif;
-    `;
+            background: #fff;
+            padding: 20px 25px;
+            border-radius: 8px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 90%;
+            max-height: 80%;
+            overflow-y: auto;
+            font-family: Arial, sans-serif;
+        `;
 
         const titlePlaceholder = generateTitlePlaceholder(issueKey);
         let html = `
-        <div style="margin-top:0;margin-bottom:16px;">
-            <h2>Aviator</h2>
-            <small style="color:#666; font-size:12px;">${version}</small>
-            <p>Create a Test Run in Qase by selecting a combination of test plans and cases.</p>
-        </div>
-        <h3 style="margin-top:16px;margin-bottom:10px;">⚙️ Test Run Configuration</h3>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <!-- Test Run Title spans both columns -->
-            <div style="grid-column: 1 / -1;">
-                <label for="qaseRunTitle" style="font-weight:bold; display:block; margin-bottom:4px;">Test Run Title</label>
-                <input type="text" id="qaseRunTitle" value=""
-                    style="width:99%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            <div style="margin-top:0;margin-bottom:16px;">
+                <h2>Aviator</h2>
+                <small style="color:#666; font-size:12px;">${version}</small>
+                <p>Create a Test Run in Qase by selecting a combination of test plans and cases.</p>
             </div>
-    `;
+            <h3 style="margin-top:16px;margin-bottom:10px;">⚙️ Test Run Configuration</h3>
+            <div>
+                    <label for="qaseRunTitle" style="font-weight:bold; display:block; margin-bottom:4px;">Test Run Title</label>
+                    <input type="text" id="qaseRunTitle" value=""
+                        style="width:99%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+                </div>
+        `;
+
+        if (qaseConfigData.environments || qaseConfigData.milestones || qaseConfigData.configurations) {
+            html += '<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">'
+        }
 
         // Environment dropdown
         if (qaseConfigData.environments) {
@@ -813,7 +800,8 @@ GM_addStyle(`
         }
 
         // Close grid
-        html += `</div>`;
+        if (qaseConfigData.environments || qaseConfigData.milestones || qaseConfigData.configurations)
+            html += `</div>`;
 
         // Linked Test Plans
         if (plans.length) {
@@ -851,8 +839,7 @@ GM_addStyle(`
             });
         }
 
-
-
+        // footer buttons
         html += `
         <div style="margin-top:20px; display: flex; justify-content: space-between; align-items: center;">
             <button id="qaseToggleAllBtn" style="padding:6px 12px; background:#F4F5F7; border:1px solid #ccc; border-radius:4px; cursor:pointer;">☑️ Select All</button>
@@ -865,7 +852,14 @@ GM_addStyle(`
 
         container.innerHTML = html;
         overlay.appendChild(container);
-        document.body.appendChild(overlay);
+
+        // either inject into jira modal for text input issues
+        // or just put on page
+        const modalContent = document.querySelector('[role="dialog"], .jira-dialog, .css-1ynzxqw');
+        if (modalContent)
+            modalContent.appendChild(overlay)
+        else
+            document.body.appendChild(overlay);
 
         document.getElementById('qaseRunTitle').value = titlePlaceholder
 
