@@ -8,9 +8,50 @@
 // @grant        GM_addStyle
 // @connect      api.qase.io
 // @connect      ci.paylocity.com
+// @connect      hooks.slack.com
 // ==/UserScript==
 
 GM_addStyle(`
+   #qasePopupOverlay {
+        background-color: rgba(0, 0, 0, 0.8) !important;
+    }
+
+   #qasePopup input[type="text"],
+   #qasePopup select {
+    font-size: 12px;
+    padding: 3px 5px;
+   }
+
+   #qasePopup h3 {
+    margin-top: 2px;
+    margin-bottom: 6px;
+   }
+
+  #qasePopup button#qaseRunBtn {
+     padding:8px 16px;
+     border-radius:4px;
+     cursor:pointer;
+   }
+
+@media (prefers-color-scheme: light) {
+    #qasePopup button#qaseRunBtn {
+        background-color: #ffffff !important;
+        color: black !important;
+        border: 2px solid #0052CC;
+    }
+
+ /* Alternating row colors for test cases */
+    #qasePopup .test-case-list > label {
+        display: block;
+        padding: 6px;
+        margin-bottom: 2px;
+        border-radius: 4px;
+        color: #000047; /* always readable */
+    }
+    #qasePopup .test-case-list > label:nth-child(odd)  { background: #cce0ff; }
+    #qasePopup .test-case-list > label:nth-child(even) { background: #F0F0F0; }
+}
+
 @media (prefers-color-scheme: dark) {
     #qasePopup {
         background: #1e1e1e !important;
@@ -33,11 +74,10 @@ GM_addStyle(`
         border: 1px solid #555;
     }
     #qasePopup button#qaseRunBtn {
-        background-color: #0a84ff !important;
+        background-color: #E6E6FF !important;
+        color: #000047 !important;
     }
-    #qasePopupOverlay {
-        background-color: rgba(0, 0, 0, 0.8) !important;
-    }
+
     /* Alternating row colors for test cases */
     #qasePopup .test-case-list > label {
         display: block;
@@ -48,16 +88,6 @@ GM_addStyle(`
     }
     #qasePopup .test-case-list > label:nth-child(odd)  { background: #E6E6FF; }
     #qasePopup .test-case-list > label:nth-child(even) { background: #F0F0F0; }
-
-    #qasePopup input[type="text"],
-   #qasePopup select {
-    font-size: 12px;
-    padding: 3px 5px;
-   }
-   #qasePopup h3 {
-    margin-top: 2px;
-    margin-bottom: 6px;
-   }
 }
 `);
 
@@ -570,19 +600,28 @@ GM_addStyle(`
             const btn = document.createElement('button');
             btn.textContent = "✈️ Aviator";
             btn.id = 'qaseScrapeButton';
-            btn.style = `
-            background: ${isDarkMode ? '#8fb8f6' : 'white'};
-            color: ${isDarkMode ? '#1f1f21' : '#0052CC'};
-            border: none;
-            border-radius: 4px;
-            font-size: 14px;
-            line-height: 20px;
-            font-family: "Atlassian Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, "Helvetica Neue", sans-serif;
-            font-weight: 500;
-            padding: 6px 12px;
-            cursor: pointer;
-            margin-left: 8px;
-        `;
+
+            if (isDarkMode) {
+                btn.style = `
+                    background: ${isDarkMode ? '#8fb8f6' : 'white'};
+                    color: ${isDarkMode ? '#1f1f21' : '#0052CC'};
+                    border: ${isDarkMode ? 'none' : '1px solid #0052CC'};
+                    border-radius: 4px;
+                    font-size: 14px;
+                    line-height: 20px;
+                    font-family: "Atlassian Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, "Helvetica Neue", sans-serif;
+                    font-weight: 500;
+                    padding: 6px 12px;
+                    cursor: pointer;
+                    margin-left: 8px;
+                `;
+            }
+            else {
+                const jiraCreateButton = document.querySelector('[data-testid="atlassian-navigation--create-button"]')
+                btn.classList = jiraCreateButton.classList
+                btn.style.marginLeft = '5px'
+            }
+
             btn.onclick = scrapeAndShowPopup;
             return btn;
         };
@@ -596,12 +635,11 @@ GM_addStyle(`
             bar.id = 'qaseTopBar';
             bar.style = `
             //width: 100%;
-            background: ${isDarkMode ? '#1f1f21' : '#0052CC'};
+            background: ${isDarkMode ? '#1f1f21' : 'white'};
             color: ${isDarkMode ? '#a9abaf' : 'white'};
             padding: 8px 16px;
             font-family: Arial, sans-serif;
             font-size: 14px;
-            z-index: 99999;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -758,9 +796,11 @@ GM_addStyle(`
         /** -- header */
         let html = `
         <div style="margin-top:0;margin-bottom:5px;flex: 0 0 auto">
-            <h2>Aviator</h2>
-            <small style="color:#666; font-size:12px;">${version}</small>
-            <p style="margin:0;padding:0">Create a Test Run in Qase by selecting a combination of test plans and cases.</p>
+           <div style="display:flex; align-items:flex-end; gap:6px;">
+             <h2 style="margin:0;">Aviator</h2>
+             <small style="color:#666; font-size:12px; margin:0;">${version}</small>
+           </div>
+           <p style="margin:0;padding:0">Create a Test Run in Qase by selecting a combination of test plans and cases.</p>
         </div>`
 
         /** -- config section */
@@ -769,7 +809,7 @@ GM_addStyle(`
             <div>
                 <label for="qaseRunTitle" style="font-weight:bold; display:block; margin-bottom:4px;">Test Run Title</label>
                 <input type="text" id="qaseRunTitle" value=""
-                    style="width:99%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+                    style="width:97%; padding:8px; border:1px solid #ccc; border-radius:4px;">
             </div>
     `;
 
@@ -867,7 +907,7 @@ GM_addStyle(`
         <div style="margin-top:20px; display: flex; justify-content: space-between; align-items: center; flex: 0 0 auto;">
             <button id="qaseToggleAllBtn" style="padding:6px 12px; background:#F4F5F7; border:1px solid #ccc; border-radius:4px; cursor:pointer;">☑️ Select All</button>
             <div>
-                <button id="qaseRunBtn" style="padding:8px 16px; background:#0052CC; color:white; border:none; border-radius:4px; cursor:pointer;">✅ Create Test Run</button>
+                <button id="qaseRunBtn">✅ Create Test Run</button>
                 <button id="qaseCancelBtn" style="padding:8px 16px; margin-left:8px; background:#ddd; border:none; border-radius:4px; cursor:pointer;">Cancel</button>
             </div>
         </div>
