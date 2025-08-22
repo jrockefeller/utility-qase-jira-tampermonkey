@@ -403,9 +403,9 @@ GM_addStyle(`
         const milestone = document.getElementById('qaseMilestone')
 
         const environmentId = environment?.value || null;
-        const enviromentText = environment.options[environment.selectedIndex].text || null
+        const enviromentText = environment?.options[environment.selectedIndex].text || null
         const milestoneId = milestone?.value || null;
-        const milestoneText = milestone.options[milestone.selectedIndex].text || null;
+        const milestoneText = milestone?.options[milestone.selectedIndex].text || null;
 
         const configSelections = Array.from(document.querySelectorAll('.qaseConfig'))
             .reduce((acc, sel) => {
