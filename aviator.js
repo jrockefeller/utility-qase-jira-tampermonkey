@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1.13
+// @version      1.2.0
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -94,7 +94,7 @@ GM_addStyle(`
 (function () {
     'use strict';
 
-    const version = 'v1.1.13'
+    const version = 'v1.2.0'
 
     //#region == Utilities ==
     function getQaseApiToken() {
@@ -361,15 +361,51 @@ GM_addStyle(`
         return { environments, milestones, configurations };
     }
 
-    /** calls Qase Api to create test run with selected plan tests and associated tests
-     * returns runId
-    */
-    async function createQaseTestRun() {
+    //#region == Slack Functions ==
+    
+    async function sendResultToSlack(data) {
         const projectCode = getQaseProjectCode();
-        const token = getQaseApiToken();
 
-        const environmentId = document.getElementById('qaseEnv')?.value || null;
-        const milestoneId = document.getElementById('qaseMilestone')?.value || null;
+        const payload = {
+            projectCode,
+            title: data.title,
+            environment: data.environment.text,
+            milestone: data.milestone.text,
+            teamCityQueued: data.tcBuilds.join(','),
+        }
+
+        console.log('sending to slack', payload)
+
+        return new Promise(resolve => {
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: `https://hooks.slack.com/triggers/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`,
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                data: JSON.stringify(payload),
+                onload: res => {
+                    console.log(res.responseText)
+                    resolve(true)
+                },
+                onerror: err => {
+                    console.log(err)
+                    reject(err)
+                }
+            });
+        });
+    }
+    //#endregion == Slack Functions ==
+
+    function getFormRunData() {
+        const environment = document.getElementById('qaseEnv')
+        const milestone = document.getElementById('qaseMilestone')
+
+        const environmentId = environment?.value || null;
+        const enviromentText = environment.options[environment.selectedIndex].text || null
+        const milestoneId = milestone?.value || null;
+        const milestoneText = milestone.options[milestone.selectedIndex].text || null;
 
         const configSelections = Array.from(document.querySelectorAll('.qaseConfig'))
             .reduce((acc, sel) => {
@@ -385,23 +421,46 @@ GM_addStyle(`
             allCaseIds.push(...ids);
         });
 
-        if (allCaseIds.length === 0) {
+        const builds = document.querySelectorAll('.teamcity-build:checked');
+        const _builds = builds.length
+            ? Array.from(builds).map(b => b.dataset.id)
+            : [];
+
+        return {
+            title: document.getElementById('qaseRunTitle').value.trim(),
+            environment: { id: environmentId, text: enviromentText },
+            milestone: { id: milestoneId, text: milestoneText },
+            configurations: configSelections,
+            caseIds: allCaseIds,
+            tcBuilds: _builds
+        }
+    }
+
+    /** calls Qase Api to create test run with selected plan tests and associated tests
+     * returns runId
+    */
+    async function createQaseTestRun() {
+        const projectCode = getQaseProjectCode();
+        const token = getQaseApiToken();
+
+        const data = getFormRunData()
+
+        if (data.caseIds.length === 0) {
             alert('No test cases selected!');
             return;
         }
 
-        const runTitle = document.getElementById('qaseRunTitle').value.trim();
-        if (!runTitle) {
+        if (!data.title) {
             alert('No test run title entered!');
             return;
         }
 
         const payload = {
-            title: runTitle,
-            cases: allCaseIds,
-            environment_id: environmentId,
-            milestone_id: milestoneId,
-            configurations: configSelections
+            title: data.title,
+            cases: data.caseIds,
+            environment_id: data.environment.id,
+            milestone_id: data.milestone.id,
+            configurations: data.configurations
         };
 
         try {
@@ -425,6 +484,9 @@ GM_addStyle(`
             // Trigger any TeamCity builds
             await triggerTeamCityBuilds(runData.result.id);
 
+            // send data to slack for usage tracking
+            await sendResultToSlack(data)
+
             // Associate with Jira AFTER run is confirmed created
             await associateQaseTestRunWithJira(projectCode, runData.result.id);
 
@@ -435,7 +497,7 @@ GM_addStyle(`
             }
 
         } catch (err) {
-            console.error('Error creating test run:', err);
+            console.log('Error creating test run:', err);
             alert('Failed to create Qase test run. See console for details.');
         }
     }
