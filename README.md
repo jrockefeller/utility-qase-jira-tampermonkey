@@ -11,7 +11,7 @@ A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and 
 - Fetches the associated Qase test plan names and test case IDs.
 - Grabs any Qase cases linked to the Jira issue via the API.
 - Presents a clean popup UI where you can:
-  - Enter a test run title.
+  - Select Test Run title and options.
   - Select which test plans and individual cases to include.
   - Select which TeamCity builds to associate to the test run and queue.
 - Creates a Qase test run with the selected items.
@@ -39,35 +39,97 @@ A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and 
 
 ```javascript
 // ==UserScript==
-// @name         aviator
+// @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1.3
+// @version      1.1
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @connect      api.qase.io
 // @connect      ci.paylocity.com
-// @require      https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/refs/heads/main/aviator.js
+// @connect      raw.githubusercontent.com
+// @connect      hooks.slack.com
+// @updateURL    https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/main/aviator.js
+// @downloadURL  https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/main/aviator.js
 // ==/UserScript==
 
-(() => {
-    // Local config or secrets — these are **not** exposed in the @require file
+(async () => {
+    // --- User local config ---
     window.aviator = {
         qase: {
-            token: 'YOUR_QASE_PERSONAL_ACCESS_TOKEN',
-            projectCode: 'YOUR_PROJECT_CODE'
+            token: '<your qase token>',
+            projectCode: '<qase project>',
+            title: '{issueKey}: {issueTitle}',
+            options: {
+                environment: true,
+                milestone: false,
+                configurations: false
+            }
         },
+        /*
         teamcity: {
-            token: 'YOUR_TEAMCITY_TOKEN',
+            token: '<REPLACE WITH YOUR OWN TEAMCITY TOKEN>',
             builds: [
-               'ARRAY_OF_BUILD_IDS',
+                '<YOUR TEAMCITY BUILDS - IF YOU HAVE NONE TO INTEGRATE THEN IGNORE THIS SECTION>'
             ]
         }
+        */
     };
-
-    // Optionally signal that setup is done
-    console.log('Config initialized for My Modular Script');
+    
+    // ----------------------------------------------------
+    // DO NOT UPDATE BELOW THIS LINE
+    // ----------------------------------------------------
+    // --- STEP 2: Try to fetch latest core from GitHub ---
+    const STORAGE_KEY = "aviator.cachedCode";
+    const STORAGE_TIME_KEY = "aviator.cachedTime";
+    const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+    const url = "https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/main/aviator.js";
+    let latestCode = null;
+    let useCache = false;
+    try {
+        const res = await new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url,
+                nocache: true,
+                onload: response => resolve(response),
+                onerror: err => reject(err)
+            });
+        });
+        if (res.status === 200 && res.responseText) {
+            latestCode = res.responseText;
+            // Save to localStorage
+            localStorage.setItem(STORAGE_KEY, latestCode);
+            localStorage.setItem(STORAGE_TIME_KEY, Date.now().toString());
+            console.log(":white_check_mark: Aviator core updated from GitHub:", url);
+        } else {
+            throw new Error("Bad status " + res.status);
+        }
+    } catch (e) {
+        console.warn(":warning: Could not fetch Aviator core, falling back to cache:", e);
+        useCache = true;
+    }
+    // --- STEP 3: Fallback to cached version if needed ---
+    if (!latestCode) {
+        const cachedCode = localStorage.getItem(STORAGE_KEY);
+        const cachedTime = localStorage.getItem(STORAGE_TIME_KEY);
+        if (cachedCode) {
+            latestCode = cachedCode;
+            console.log(":package: Loaded Aviator core from cache (age: " +
+                ((Date.now() - cachedTime) / 1000 / 60).toFixed(1) + " min)");
+        } else {
+            console.error(":x: No Aviator core available (network + cache failed).");
+            return;
+        }
+    }
+    // --- STEP 4: Run Aviator core in page context ---
+    try {
+        eval(latestCode);
+        console.log(":white_check_mark: Aviator core executed in Tampermonkey sandbox");
+    } catch (e) {
+        console.error(":x: Failed to execute Aviator core:", e);
+    }
 })();
 ```
 
