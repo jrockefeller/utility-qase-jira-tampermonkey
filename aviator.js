@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Aviator
+// @name         AviatorTest
 // @namespace    http://tampermonkey.net/
-// @version      1.2.0
+// @version      1.1.13
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -12,89 +12,259 @@
 // ==/UserScript==
 
 GM_addStyle(`
-   #qasePopupOverlay {
-        background-color: rgba(0, 0, 0, 0.8) !important;
+     /* Base styles for your injected popup */
+    #qasePopupOverlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        /* stay above Jira */
     }
 
-   #qasePopup input[type="text"],
-   #qasePopup select {
-    font-size: 12px;
-    padding: 3px 5px;
-   }
-
-   #qasePopup h3 {
-    margin-top: 2px;
-    margin-bottom: 6px;
-   }
-
-  #qasePopup button#qaseRunBtn {
-     padding:8px 16px;
-     border-radius:4px;
-     cursor:pointer;
-   }
-
-@media (prefers-color-scheme: light) {
-    #qasePopup button#qaseRunBtn {
-        background-color: #ffffff !important;
-        color: black !important;
-        border: 2px solid #0052CC;
-    }
-
- /* Alternating row colors for test cases */
-    #qasePopup .test-case-list > label {
-        display: block;
-        padding: 6px;
-        margin-bottom: 2px;
-        border-radius: 4px;
-        color: #000047; /* always readable */
-    }
-    #qasePopup .test-case-list > label:nth-child(odd)  { background: #cce0ff; }
-    #qasePopup .test-case-list > label:nth-child(even) { background: #F0F0F0; }
-}
-
-@media (prefers-color-scheme: dark) {
     #qasePopup {
-        background: #1e1e1e !important;
-        color: #f0f0f0 !important;
-    }
-    #qasePopup input[type="text"] {
-        background-color: #2b2b2b;
-        color: #f0f0f0;
-        border: 1px solid #444;
-    }
-    #qasePopup h2, #qasePopup h3 {
-        color: #ffffff;
-    }
-    #qasePopup label {
-        color: #f0f0f0;
-    }
-    #qasePopup button {
-        background-color: #333 !important;
-        color: #fff !important;
-        border: 1px solid #555;
-    }
-    #qasePopup button#qaseRunBtn {
-        background-color: #E6E6FF !important;
-        color: #000047 !important;
+        background: var(--bg);
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        max-width: 120vh;
+        width: 95%;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        font-family: "Segoe UI", Arial, sans-serif;
+        color: var(--text);
+        position: relative;
+        z-index: 9999;
+        /* makes sure it sits above Jira UI */
     }
 
-    /* Alternating row colors for test cases */
-    #qasePopup .test-case-list > label {
-        display: block;
-        padding: 6px;
-        margin-bottom: 2px;
-        border-radius: 4px;
-        color: #000047; /* always readable */
+    /* Two-column shell */
+    #qasePopup .column {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow-y: auto;
+        max-height: 70vh;
     }
-    #qasePopup .test-case-list > label:nth-child(odd)  { background: #E6E6FF; }
-    #qasePopup .test-case-list > label:nth-child(even) { background: #F0F0F0; }
-}
+
+    /* Light mode */
+    @media (prefers-color-scheme: light) {
+        #qasePopup {
+            background: #fff;
+            color: #222;
+            --bg: #ffffff;
+            --bg-card: #fafafa;
+            --text: #222;
+            --text-muted: #666;
+            --border: #ddd;
+            --primary: #4caf50;
+            --primary-hover: #43a047;
+            --secondary: #eee;
+            --secondary-hover: #ddd;
+        }
+
+        #qasePopup .test-case-list>label {
+            display: block;
+            padding: 6px;
+            margin-bottom: 2px;
+            border-radius: 4px;
+            color: #000047;
+            /* always readable */
+        }
+
+        #qasePopup .test-case-list>label:nth-child(odd) {
+            background: #e6f0ff;
+        }
+
+        #qasePopup .test-case-list>label:nth-child(even) {
+            background: #F0F0F0;
+        }
+
+    }
+
+    #qasePopup .test-case-list:nth-child(odd) {
+        margin-bottom: 15px;
+    }
+
+    /* Dark mode */
+    @media (prefers-color-scheme: dark) {
+        #qasePopup {
+            background: #1e1e1e;
+            color: #f1f1f1;
+            --bg: #1e1e1e;
+            --bg-card: #2a2a2a;
+            --text: #f5f5f5;
+            --text-muted: #aaa;
+            --border: #444;
+            --primary: #66bb6a;
+            --primary-hover: #57a05b;
+            --secondary: #333;
+            --secondary-hover: #444;
+        }
+
+        #qasePopup .test-case-list>label {
+            display: block;
+            padding: 6px;
+            margin-bottom: 2px;
+            border-radius: 4px;
+            /*color: #000047;*/
+            color: #e7e7e4
+            /* always readable */
+        }
+
+        #qasePopup .test-case-list>label:nth-child(odd) {
+           /* background: #E6E6FF; */
+           background: #54545E;
+        }
+
+        #qasePopup .test-case-list>label:nth-child(even) {
+           /* background: #F0F0F0; */
+           background: #35353D;
+        }
+
+    }
+
+    #qasePopup .popup-header {
+        margin-bottom: 20px;
+    }
+
+    #qasePopup .popup-title {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+    }
+
+    #qasePopup .popup-title h2 {
+        margin: 0;
+        font-size: 1.8rem;
+        color: var(--text);
+    }
+
+    #qasePopup .popup-title small {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+
+    #qasePopup .popup-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        flex: 1;
+        overflow: hidden;
+    }
+
+    #qasePopup .popup-column {
+        background: var(--bg-card);
+        padding: 15px;
+        border-radius: 8px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+    }
+
+    #qasePopup h3 {
+        margin-top: 0;
+        margin-bottom: 12px;
+        font-size: 1.1rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 6px;
+    }
+
+    #qasePopup label {
+        margin-bottom: 10px;
+        color: var(--text);
+    }
+
+    #qasePopup input[type="text"],
+    #qasePopup select {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: 7px;
+        font-size: 0.95rem;
+        background: var(--bg);
+        color: var(--text);
+    }
+
+    #qasePopup #qaseRunTitle {
+       width: 96%;
+    }
+
+    #qasePopup input[type="checkbox"] {
+        accent-color: var(--primary);
+    }
+
+    #qasePopup .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0px 10px;
+    }
+
+    #qasePopup .popup-footer {
+        margin-top: 20px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+    }
+
+    #qasePopup .btn {
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: none;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    #qasePopup .btn.primary {
+        background: var(--primary);
+        color: #fff;
+    }
+
+    #qasePopup .btn.primary:hover {
+        background: var(--primary-hover);
+    }
+
+    #qasePopup .btn.secondary {
+        background: var(--secondary);
+        color: var(--text);
+    }
+
+    #qasePopup .btn.secondary:hover {
+        background: var(--secondary-hover);
+    }
+
+    @media (max-width: 700px) {
+        #qasePopup .popup-body {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    #qasePopup .subText {
+        color: #737373;
+        font-size: 0.85rem;
+    }
+
+    #qasePopup #qaseToggleAllBtn {
+        color: black;
+        background: #F4F5F7;
+        border: 1px solid #ccc;
+        margin-right: auto;
+    }
+
+    #qasePopup .build-list>label {
+        display:block;
+    }
 `);
 
 (function () {
     'use strict';
 
-    const version = 'v1.2.0'
+    const version = '1.0'
 
     //#region == Utilities ==
     function getQaseApiToken() {
@@ -212,6 +382,48 @@ GM_addStyle(`
         return { issueKey, issueTitle }
     }
 
+    async function api({ method, url, headers = {}, data = null }) {
+        const tryParseJSON = (text) => {
+            try {
+                return JSON.parse(text);
+            } catch {
+                return null; // not JSON
+            }
+        }
+
+        return new Promise((resolve, reject) => {
+            const request = {
+                method,
+                url,
+                onload: res => {
+
+                    const data = tryParseJSON(res.responseText)
+                    if (data) resolve(data)
+                    else resolve(res.responseText)
+                },
+                onerror: err => {
+                    console.log(url, err)
+                    console.error(err);
+                    reject(err);
+                }
+            };
+
+            // Add headers if provided
+            request.headers = {
+                Accept: 'application/json',
+                ...headers
+            };
+
+            // Add body only if provided
+            if (data !== null && data !== undefined) {
+                request.headers['Content-Type'] = 'application/json';
+                request.data = (typeof data === 'string') ? data : JSON.stringify(data);
+            }
+
+            GM_xmlhttpRequest(request);
+        });
+    }
+
     //#endregion == Utilities ==
 
     //#region == Qase Functions ==
@@ -244,90 +456,73 @@ GM_addStyle(`
     }
 
     /** calls Qase Api to get plan details with plan qase test ids */
-    function fetchQaseTestPlanDetails(projectCode, planId) {
+    async function fetchQaseTestPlanDetails(projectCode, planId) {
         const token = getQaseApiToken();
 
-        return new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `https://api.qase.io/v1/plan/${projectCode}/${planId}`,
-                headers: { 'Accept': 'application/json', 'Token': token },
-                onload: res => {
-                    const data = JSON.parse(res.responseText);
-                    const cases = data.result.cases.map(c => c.case_id);
-                    resolve({ projectCode: projectCode, title: data.result.title, caseIds: cases });
-                }
-            });
-        });
+        const data = await api({
+            method: 'GET', url: `https://api.qase.io/v1/plan/${projectCode}/${planId}`,
+            headers: { 'Token': token }
+        })
+        console.log('fetchQaseTestPlanDetails', data)
+        const cases = data.result.cases.map(c => c.case_id);
+
+        return {
+            projectCode: projectCode,
+            title: data.result.title,
+            caseIds: cases
+        }
     }
 
     /** calls Qase Api to get associated jira ticket qase test ids */
-    function fetchQaseTestCases(projectCode, issueKey) {
+    async function fetchQaseTestCases(projectCode, issueKey) {
         const token = getQaseApiToken();
 
-        return new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `https://api.qase.io/v1/case/${projectCode}?external_issues[type]=jira-cloud&external_issues[ids][]=${issueKey}&limit=50`,
-                headers: { 'Accept': 'application/json', 'Token': token },
-                onload: res => {
-                    const data = JSON.parse(res.responseText);
-                    const caseItems = data.result.entities.map(e => ({ id: e.id, title: e.title }));
-                    resolve(caseItems);
-                }
-            });
-        });
+        const data = await api({
+            method: 'GET', url: `https://api.qase.io/v1/case/${projectCode}?external_issues[type]=jira-cloud&external_issues[ids][]=${issueKey}&limit=50`,
+            headers: { Token: token }
+        })
+        const caseItems = data.result.entities.map(e => ({ id: e.id, title: e.title }));
+        return caseItems;
+
     }
 
-    function fetchQaseEnvironments() {
+    async function fetchQaseEnvironments() {
         const token = getQaseApiToken();
         const projectCode = getQaseProjectCode();
 
-        return new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `https://api.qase.io/v1/environment/${projectCode}?limit=100&offset=0`,
-                headers: { 'Accept': 'application/json', 'Token': token },
-                onload: res => {
-                    const data = JSON.parse(res.responseText);
-                    resolve(data.result.entities);
-                }
-            });
-        });
+        const data = await api({
+            method: 'GET',
+            url: `https://api.qase.io/v1/environment/${projectCode}?limit=100&offset=0`,
+            headers: { 'Accept': 'application/json', token: token }
+        })
+
+        return data.result.entities
     }
 
-    function fetchQaseMilestones() {
+    async function fetchQaseMilestones() {
         const token = getQaseApiToken();
         const projectCode = getQaseProjectCode();
 
-        return new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `https://api.qase.io/v1/milestone/${projectCode}?limit=10&offset=00`,
-                headers: { 'Accept': 'application/json', 'Token': token },
-                onload: res => {
-                    const data = JSON.parse(res.responseText);
-                    resolve(data.result.entities);
-                }
-            });
-        });
+        const data = await api({
+            method: 'GET',
+            url: `https://api.qase.io/v1/milestone/${projectCode}?limit=10&offset=00`,
+            headers: { 'Accept': 'application/json', token: token }
+        })
+
+        return data.result.entities
     }
 
-    function fetchQaseConfigurations() {
+    async function fetchQaseConfigurations() {
         const token = getQaseApiToken();
         const projectCode = getQaseProjectCode();
 
-        return new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `https://api.qase.io/v1/configuration/${projectCode}`,
-                headers: { 'Accept': 'application/json', 'Token': token },
-                onload: res => {
-                    const data = JSON.parse(res.responseText);
-                    resolve(data.result.entities);
-                }
-            });
-        });
+        const data = await api({
+            method: 'GET',
+            url: `https://api.qase.io/v1/configuration/${projectCode}`,
+            headers: { 'Accept': 'application/json', token: token }
+        })
+
+        return data.result.entities
     }
 
     async function fetchQaseTestRunConfig() {
@@ -362,7 +557,7 @@ GM_addStyle(`
     }
 
     //#region == Slack Functions ==
-    
+
     async function sendResultToSlack(data) {
         const projectCode = getQaseProjectCode();
 
@@ -376,25 +571,16 @@ GM_addStyle(`
 
         console.log('sending to slack', payload)
 
-        return new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: `https://hooks.slack.com/triggers/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`,
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                },
-                data: JSON.stringify(payload),
-                onload: res => {
-                    console.log(res.responseText)
-                    resolve(true)
-                },
-                onerror: err => {
-                    console.log(err)
-                    reject(err)
-                }
-            });
-        });
+        await api({
+            method: 'POST',
+            url: `https://hooks.slack.com/triggers/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`,
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            data: payload
+        })
+
     }
     //#endregion == Slack Functions ==
 
@@ -464,20 +650,16 @@ GM_addStyle(`
         };
 
         try {
-            const runData = await new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: 'POST',
-                    url: `https://api.qase.io/v1/run/${projectCode}`,
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                        'Token': token
-                    },
-                    data: JSON.stringify(payload),
-                    onload: res => resolve(JSON.parse(res.responseText)),
-                    onerror: err => reject(err)
-                });
-            });
+            const runData = await api({
+                method: 'POST',
+                url: `https://api.qase.io/v1/run/${projectCode}`,
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Token': token
+                },
+                data: payload
+            })
 
             console.log(`Qase: Test Run Created: ${runData.result.id}`);
 
@@ -506,7 +688,7 @@ GM_addStyle(`
     /** Associate the newly created test run to the ticket
      * add Qase: Test runs section in UI
     */
-    function associateQaseTestRunWithJira(projectCode, runId) {
+    async function associateQaseTestRunWithJira(projectCode, runId) {
         const token = getQaseApiToken();
 
         let { issueKey } = getJiraIssueDetails()
@@ -518,52 +700,50 @@ GM_addStyle(`
         console.log('Qase: Associating Run ID', runId, 'with Jira issue', issueKey);
         showLoading('Associating test run with Jira...');
 
-        GM_xmlhttpRequest({
-            method: 'POST',
-            url: `https://api.qase.io/v1/run/${projectCode}/external-issue`,
-            headers: {
-                'Content-Type': 'application/json',
-                'Token': token
-            },
-            data: JSON.stringify({
-                type: 'jira-cloud',
-                links: [{ run_id: runId, external_issue: issueKey }]
-            }),
-            onload: function (response) {
-                hideLoading();
-                try {
-                    const res = JSON.parse(response.responseText);
-                    console.log(`Qase: Jira issue ${issueKey} successfully associated with Run ID ${runId}.`);
-
-                    // Conditional behavior
-                    const qasePanel = document.querySelector('[data-testid="issue-view-ecosystem.connect.content-panel.qase.jira.cloud__qase-runs"]');
-                    if (qasePanel) {
-                        location.reload();
-                    } else {
-                        const appsDropdownBtn = document.querySelector('button[data-testid="issue-view-foundation.quick-add.quick-add-items-compact.apps-button-dropdown--trigger"]');
-                        if (appsDropdownBtn) {
-                            appsDropdownBtn.click();
-                            setTimeout(() => {
-                                const qaseButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent.trim() === 'Qase: runs');
-                                if (qaseButton) {
-                                    qaseButton.click();
-                                } else {
-                                    console.warn('Qase button not found after opening dropdown.');
-                                }
-                            }, 500); // adjust delay as needed
-                        } else {
-                            console.warn('Apps dropdown button not found.');
-                        }
-                    }
-                } catch (e) {
-                    console.error('Error parsing association response:', e);
+        try {
+            await api({
+                method: 'POST',
+                url: `https://api.qase.io/v1/run/${projectCode}/external-issue`,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Token': token
+                },
+                data: {
+                    type: 'jira-cloud',
+                    links: [{ run_id: runId, external_issue: issueKey }]
                 }
-            },
-            onerror: function (err) {
-                hideLoading();
-                console.error('Error associating Jira issue:', err);
+            })
+
+            hideLoading();
+
+            console.log(`Qase: Jira issue ${issueKey} successfully associated with Run ID ${runId}.`);
+
+            // Conditional behavior
+            const qasePanel = document.querySelector('[data-testid="issue-view-ecosystem.connect.content-panel.qase.jira.cloud__qase-runs"]');
+            if (qasePanel) {
+                location.reload();
+            } else {
+                const appsDropdownBtn = document.querySelector('button[data-testid="issue-view-foundation.quick-add.quick-add-items-compact.apps-button-dropdown--trigger"]');
+                if (appsDropdownBtn) {
+                    appsDropdownBtn.click();
+                    setTimeout(() => {
+                        const qaseButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent.trim() === 'Qase: runs');
+                        if (qaseButton) {
+                            qaseButton.click();
+                        } else {
+                            console.warn('Qase button not found after opening dropdown.');
+                        }
+                    }, 500); // adjust delay as needed
+                } else {
+                    console.warn('Apps dropdown button not found.');
+                }
             }
-        });
+
+        }
+        catch (e) {
+            hideLoading();
+            console.error('Error associating Jira issue:', e);
+        }
     }
 
     //#endregion Qase Functions
@@ -572,20 +752,17 @@ GM_addStyle(`
 
     /** calls TeamCity to get csrf token needed to communiticate for auth */
     async function getTeamCityCsrfToken(token) {
-        return new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `https://ci.paylocity.com/authenticationTest.html?csrf`,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json'
-                },
-                onload: res => {
-                    resolve(res.responseText);
-                }
-            });
-        });
+
+        const data = await api({
+            method: 'GET',
+            url: `https://ci.paylocity.com/authenticationTest.html?csrf`,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        })
+
+        return data
     }
 
     /** trigger selected teamcity builds */
@@ -595,58 +772,48 @@ GM_addStyle(`
         const cfsrToken = await getTeamCityCsrfToken(token)
         const builds = document.querySelectorAll('.teamcity-build:checked');
 
-        builds.forEach(b => {
+        for (b of builds) {
             const buildId = b.dataset.id;
 
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: `https://ci.paylocity.com/app/rest/buildQueue`,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json',
-                    'X-TC-CSRF-Token': cfsrToken
-                },
-                data: JSON.stringify({
-                    buildType: { id: buildId },
-                    properties: {
-                        property: [
-                            { name: "env.QASE_TESTOPS_RUN_ID", value: runId },
-                            { name: "env.QASE_TESTOPS_RUN_COMPLETE", value: 'false' },
-                        ]
+            try {
+                await api({
+                    method: 'POST',
+                    url: `https://ci.paylocity.com/app/rest/buildQueue`,
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-TC-CSRF-Token': cfsrToken
+
+                    },
+                    data: {
+                        buildType: { id: buildId },
+                        properties: {
+                            property: [
+                                { name: "env.QASE_TESTOPS_RUN_ID", value: runId },
+                                { name: "env.QASE_TESTOPS_RUN_COMPLETE", value: 'false' },
+                            ]
+                        }
                     }
-                }),
-                onload: res => {
-                    console.log(`[TeamCity] Build triggered: ${buildId}`);
-                },
-                onerror: err => {
-                    console.error(`[TeamCity] Failed to trigger build ${buildId}`, err);
-                }
-            });
-        });
+                })
+
+                console.log(`[TeamCity] Build triggered: ${buildId}`);
+
+            }
+            catch (err) {
+                console.error(`[TeamCity] Build trigger failed: ${buildId}`, err)
+            }
+        };
     }
 
     async function fetchTeamCityBuildDetails(buildId) {
         const token = window.aviator?.teamcity?.token;
         const cfsrToken = await getTeamCityCsrfToken(token)
 
-        return new Promise(resolve => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `https://ci.paylocity.com/app/rest/buildTypes/id:${buildId}?fields=id,projectId,name,projectName,webUrl,description`,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json',
-                    'X-TC-CSRF-Token': cfsrToken
-                },
-                onload: res => {
-                    const data = JSON.parse(res.responseText);
-
-                    resolve(data);
-                }
-            });
-        });
+        const data = await api({
+            method: 'GET',
+            url: `https://ci.paylocity.com/app/rest/buildTypes/id:${buildId}?fields=id,projectId,name,projectName,webUrl,description`,
+            headers: { Authorization: `Bearer ${token}`, 'X-TC-CSRF-Token': cfsrToken }
+        })
+        return data
     }
 
     //#endregion TeamCity Functions
@@ -811,6 +978,108 @@ GM_addStyle(`
         showPopup(issueKey, planDetails, externalCases, qaseConfigData, tcBuildDetails);
     }
 
+    function htmlTestPlans(plans) {
+        const plansDiv = document.createElement('div')
+        plansDiv.classList = 'test-case-list'
+
+        if (plans.length) {
+            let html = `<h3>📦 Linked Test Plans</h3>`
+            plans.forEach((p) => {
+                html += `<label><input type="checkbox" class="qase-item" data-type="plan" data-ids="${p.caseIds.join(',')}">
+                                ${p.title} <span class="subText">(${p.caseIds.length} Case${p.caseIds.length === 1 ? '' : 's'})</span></label>
+                        <label>`;
+            });
+
+            plansDiv.innerHTML = html
+        }
+
+        return plansDiv
+    }
+
+    function htmlTestCases(externalCases) {
+        const div = document.createElement('div')
+        div.classList = 'test-case-list'
+
+        if (externalCases.length) {
+            let html = `<h3>🔗 Linked Test Cases</h3>`
+            externalCases.forEach((item) => {
+                html += `<label>
+                            <input type="checkbox" class="qase-item" data-type="case" data-ids="${item.id}"> #${item.id} - ${item.title}
+                        </label>`;
+            });
+
+            div.innerHTML = html
+        }
+        return div
+    }
+
+    function htmlTestRunDetails(qaseConfigData) {
+        const div = document.createElement('div')
+        div.innerHTML = `
+            <h3>⚙️ Test Run Configuration</h3>
+            <label>Test Run Title</label>
+            <input type="text" id="qaseRunTitle">
+        `
+
+        const grid = document.createElement('div')
+        grid.classList = 'grid-2'
+
+        if (qaseConfigData.environments) {
+            const env = document.createElement('div')
+            env.innerHTML = `<label>Environment</label>
+                            <select id="qaseEnv">
+                                <option value=""></option>
+                                ${qaseConfigData.environments.map(env => `<option value="${env.id}">${env.title}</option>`).join('')}
+                            </select>`
+            grid.appendChild(env)
+        }
+
+        if (qaseConfigData.milestones) {
+            const milestone = document.createElement('div')
+            milestone.innerHTML = `<label>Milestone</label>
+                            <select id="qaseMilestone">
+                                <option value=""></option>
+                                ${qaseConfigData.milestones.map(ms => `<option value="${ms.id}">${ms.title}</option>`).join('')}
+                            </select>`
+            grid.appendChild(milestone)
+        }
+
+        if (qaseConfigData.configurations) {
+            qaseConfigData.configurations.forEach(entity => {
+                const _div = document.createElement('div')
+                _div.innerHTML = `<label>${entity.title}</label>
+                            <select class="qaseConfig" data-entity-id="${entity.id}">
+                                <option value=""></option>
+                                 ${entity.configurations.map(cfg => `<option value="${cfg.id}">${cfg.title}</option>`).join('')}
+                            </select>`
+                grid.appendChild(_div)
+            });
+        }
+
+        div.appendChild(grid)
+        return div
+
+    }
+
+    function htmlTeamCityBuilds(tcBuildDetails) {
+        const div = document.createElement('div')
+        div.classList = 'build-list'
+
+        if (tcBuildDetails.length) {
+            let html = `<h3>🚀 TeamCity Builds</h3>`
+            tcBuildDetails.forEach((build) => {
+                html += `<label>
+                            <input type="checkbox" class="teamcity-build" data-id="${build.id}"> ${build.name.replace(' / ', '/')} <span
+                            class="subText">(${build.projectName})</span>
+                        </label>`;
+            });
+
+            div.innerHTML = html
+        }
+        return div
+    }
+
+
     /** present popup UI
      * on submit calls createQaseTestRun()
     */
@@ -823,159 +1092,54 @@ GM_addStyle(`
             return;
         }
 
+        // create background overlay dark shadow
         const overlay = document.createElement('div');
         overlay.id = 'qasePopupOverlay';
-        overlay.style = `
-        position: fixed;
-        top: 0; left: 0;
-        width: 100%; height: 100%;
-        background: rgba(0,0,0,0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-        pointerEvents: 'auto' // ensure overlay is interactive
-    `;
 
+        // popup contents container
         const container = document.createElement('div');
         container.id = 'qasePopup';
-        container.style = `
-        background: #fff;
-        padding: 20px 25px;
-        border-radius: 8px;
-        box-shadow: rgba(0,0,0,0.3)
-        0px 8px 30px;
-        max-width: 600px;
-        width: 90%;
-        max-height: 90%;
-        display: flex;
-        flex-direction: column;
-        font-family: Arial, sans-serif;
-    `;
 
-        const titlePlaceholder = generateTitlePlaceholder(issueKey);
+        // header
+        const header = document.createElement('div')
+        header.classList = 'popup-header'
+        header.innerHTML = `
+                <div class="popup-title">
+                    <h2>Aviator</h2>
+                    <small>v${version}</small>
+                </div>
+                <p>Create a Test Run in Qase by selecting a combination of test plans and cases.</p>`
+        container.appendChild(header)
 
-        /** -- header */
-        let html = `
-        <div style="margin-top:0;margin-bottom:5px;flex: 0 0 auto">
-           <div style="display:flex; align-items:flex-end; gap:6px;">
-             <h2 style="margin:0;">Aviator</h2>
-             <small style="color:#666; font-size:12px; margin:0;">${version}</small>
-           </div>
-           <p style="margin:0;padding:0">Create a Test Run in Qase by selecting a combination of test plans and cases.</p>
-        </div>`
+        // content body with columns
+        const popupBody = document.createElement('div')
+        popupBody.classList = 'popup-body'
 
-        /** -- config section */
-        html += `<div style="flex: 0 0 auto;">
-            <h3>⚙️ Test Run Configuration</h3>
-            <div>
-                <label for="qaseRunTitle" style="font-weight:bold; display:block; margin-bottom:4px;">Test Run Title</label>
-                <input type="text" id="qaseRunTitle" value=""
-                    style="width:97%; padding:8px; border:1px solid #ccc; border-radius:4px;">
-            </div>
-    `;
+        // column 1
+        const column1 = document.createElement('div')
+        column1.classList = 'popup-column'
+        column1.appendChild(htmlTestPlans(plans))
+        column1.appendChild(htmlTestCases(externalCases))
+        popupBody.appendChild(column1)
 
-        if (qaseConfigData.environments || qaseConfigData.milestones || qaseConfigData.configurations) {
-            html += '<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 5px;">'
-        }
+        // column 2
+        const column2 = document.createElement('div')
+        column2.classList = 'popup-column'
+        column2.appendChild(htmlTestRunDetails(qaseConfigData))
+        column2.appendChild(htmlTeamCityBuilds(tcBuildDetails))
+        popupBody.appendChild(column2)
+        container.appendChild(popupBody)
 
-        // Environment dropdown
-        if (qaseConfigData.environments) {
-            html += `
-        <div>
-            <label style="font-weight:bold; display:block; margin-bottom:4px;">Environment</label>
-            <select id="qaseEnv" style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px;">
-                <option value=""></option>
-                ${qaseConfigData.environments.map(env => `<option value="${env.id}">${env.title}</option>`).join('')}
-            </select>
-        </div>`;
-        }
+        // footer
+        const footer = document.createElement('div')
+        footer.classList = 'popup-footer'
+        footer.innerHTML = `
+            <button id="qaseToggleAllBtn" class="btn">☑️ Select All</button>
+            <button id="qaseRunBtn" class="btn primary">✅ Create Test Run</button>
+            <button id="qaseCancelBtn" class="btn secondary">Cancel</button>
+        `
+        container.appendChild(footer)
 
-        // Milestone dropdown
-        if (qaseConfigData.milestones) {
-            html += `
-        <div>
-            <label style="font-weight:bold; display:block; margin-bottom:4px;">Milestone</label>
-            <select id="qaseMilestone" style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px;">
-                <option value=""></option>
-                ${qaseConfigData.milestones.map(ms => `<option value="${ms.id}">${ms.title}</option>`).join('')}
-            </select>
-        </div>`;
-        }
-
-        // Dynamic Configurations
-        if (qaseConfigData.configurations) {
-            qaseConfigData.configurations.forEach(entity => {
-                html += `
-            <div>
-                <label style="font-weight:bold; display:block; margin-bottom:4px;">${entity.title}</label>
-                <select class="qaseConfig" data-entity-id="${entity.id}"
-                    style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px;">
-                    <option value=""></option>
-                    ${entity.configurations.map(cfg => `<option value="${cfg.id}">${cfg.title}</option>`).join('')}
-                </select>
-            </div>`;
-            });
-        }
-
-        // Close grid
-        if (qaseConfigData.environments || qaseConfigData.milestones || qaseConfigData.configurations)
-            html += `</div>`;
-
-        html += '</div>' // close config section div
-
-        // scrollable content
-        html += '<div style="flex: 1 1 auto; overflow-y: auto; margin-top: 12px; padding-right: 6px;">'
-        // Linked Test Plans
-        if (plans.length) {
-            html += `<h3>📦 Linked Test Plans</h3>`;
-            html += '<div class="test-case-list">';
-            plans.forEach((p) => {
-                html += `<label style="display:block; margin-bottom:8px;">
-                <input type="checkbox" class="qase-item" data-type="plan" data-ids="${p.caseIds.join(',')}">
-                <strong>${p.title}</strong> <span style="color:#555;">(${p.caseIds.length} Case${p.caseIds.length === 1 ? '' : 's'})</span>
-            </label>`;
-            });
-            html += '</div>'
-
-        }
-
-        // Linked Test Cases
-        if (externalCases.length) {
-            html += `<h3>🔗 Linked Test Cases</h3>`;
-            html += '<div class="test-case-list">';
-            externalCases.forEach(item => {
-                html += `<label style="display:block; margin-bottom:6px;">
-                <input type="checkbox" class="qase-item" data-type="case" data-ids="${item.id}">#${item.id} - ${item.title}
-            </label>`;
-            });
-            html += '</div>'
-        }
-
-        // TeamCity Builds
-        if (tcBuildDetails.length) {
-            html += `<h3>🚀 TeamCity Builds</h3>`;
-            tcBuildDetails.forEach(build => {
-                html += `<label style="display:block; margin-bottom:6px;">
-                <input type="checkbox" class="teamcity-build" data-id="${build.id}">${build.name} (${build.projectName})
-            </label>`;
-            });
-        }
-
-        html += '</div>' // end scrollable content
-
-
-        html += `
-        <div style="margin-top:20px; display: flex; justify-content: space-between; align-items: center; flex: 0 0 auto;">
-            <button id="qaseToggleAllBtn" style="padding:6px 12px; background:#F4F5F7; border:1px solid #ccc; border-radius:4px; cursor:pointer;">☑️ Select All</button>
-            <div>
-                <button id="qaseRunBtn">✅ Create Test Run</button>
-                <button id="qaseCancelBtn" style="padding:8px 16px; margin-left:8px; background:#ddd; border:none; border-radius:4px; cursor:pointer;">Cancel</button>
-            </div>
-        </div>
-    `;
-
-        container.innerHTML = html;
         overlay.appendChild(container);
 
         const modalContent = document.querySelector('[role="dialog"], .jira-dialog, .css-1ynzxqw');
@@ -984,14 +1148,54 @@ GM_addStyle(`
         else
             document.body.appendChild(overlay);
 
-        document.getElementById('qaseRunTitle').value = titlePlaceholder
+        const runTitleInput = document.getElementById('qaseRunTitle');
+        runTitleInput.value = generateTitlePlaceholder(issueKey);
+
+        // --- live validation setup ---
+        const errorMsg = document.createElement('div');
+        errorMsg.style.color = 'red';
+        errorMsg.style.fontSize = '0.85rem';
+        errorMsg.style.marginTop = '-4px';
+        errorMsg.style.marginBottom = '8px';
+        errorMsg.style.display = 'none';
+        errorMsg.id = 'qaseRunTitleError';
+        runTitleInput.insertAdjacentElement('afterend', errorMsg);
+
+        function validateRunTitle() {
+            const value = runTitleInput.value.trim();
+            if (!value) {
+                errorMsg.textContent = 'Run title is required.';
+                errorMsg.style.display = 'block';
+                return false;
+            }
+            if (value.length < 5) {
+                errorMsg.textContent = 'Run title must be at least 5 characters.';
+                errorMsg.style.display = 'block';
+                return false;
+            }
+            // if (/[^\w\s-]/.test(value)) {
+            //     errorMsg.textContent = 'Run title contains invalid characters.';
+            //     errorMsg.style.display = 'block';
+            //     return false;
+            // }
+            errorMsg.style.display = 'none';
+            return true;
+        }
+
+        runTitleInput.addEventListener('input', validateRunTitle);
 
         // Handle Create Test Run click
         document.getElementById('qaseRunBtn').onclick = async () => {
-            const selected = document.querySelectorAll('.qase-item:checked');
-            if (selected.length === 0) {
+            const data = getFormRunData();
+            console.log(data.caseIds)
+            if (!data.caseIds.length) {
                 alert('No test cases selected!');
-                return; // popup stays open
+                return;
+            }
+
+            if (!validateRunTitle()) {
+                runTitleInput.focus();
+                return;
             }
 
             try {
