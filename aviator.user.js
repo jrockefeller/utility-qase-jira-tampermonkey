@@ -36,7 +36,24 @@
         }
         */
     };
-    
+
+    /* 
+    // If you need to handle multiple jira projects that associated to different qase projects. Then update the if statements inside of the match block.
+    const _url = window.location.href;
+    const match = _url.match(/paylocity\.atlassian\.net\/(?:browse\/([A-Z0-9]+)-|jira\/software\/c\/projects\/([A-Z0-9]+)\/)/);
+
+    if (match) {
+        const jiraProject = match[1] || match[2];
+        if (jiraProject == 'CM') {
+            window.aviator.qase.projectCode = 'CM';
+        }
+        else if (jiraProject == 'PE') {
+            window.aviator.qase.projectCode = 'DEMOS';
+        }
+    }
+    */
+
+
     // ----------------------------------------------------
     // DO NOT UPDATE BELOW THIS LINE
     // ----------------------------------------------------
