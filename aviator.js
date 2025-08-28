@@ -23,6 +23,28 @@ GM_addStyle(`
         z-index: 99999;
         /* stay above Jira */
     }
+`);
+
+(function () {
+    'use strict';
+
+    const version = '1.0'
+
+    //#region == Utilities ==
+    let jiraShortcutBlocker = null;
+    let shadowRoot; // keep this global or in a closure
+    const shadowStyles = `
+     /* Base styles for your injected popup */
+    #qasePopupOverlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        /* stay above Jira */
+    }
 
     #qasePopup {
         background: var(--bg);
@@ -259,14 +281,8 @@ GM_addStyle(`
     #qasePopup .build-list>label {
         display:block;
     }
-`);
+`
 
-(function () {
-    'use strict';
-
-    const version = '1.0'
-
-    //#region == Utilities ==
     function getQaseApiToken() {
         return window.aviator.qase.token;
     }
@@ -352,6 +368,43 @@ GM_addStyle(`
     function hideLoading() {
         const overlay = document.getElementById('qaseLoadingOverlay');
         if (overlay) overlay.remove();
+    }
+
+    function blockJiraShortcuts() {
+        if (jiraShortcutBlocker) return; // Already active
+
+        const handler = (e) => {
+            // Stop Jira from seeing any key event
+            e.stopPropagation();
+            // Optional: prevent default if you want to block certain keys entirely
+            // e.preventDefault();
+        };
+
+        ['keydown', 'keypress', 'keyup'].forEach(eventName =>
+            document.addEventListener(eventName, handler, true) // use capture phase
+        );
+
+        // Store the cleanup function
+        jiraShortcutBlocker = () => {
+            ['keydown', 'keypress', 'keyup'].forEach(eventName =>
+                document.removeEventListener(eventName, handler, true)
+            );
+            jiraShortcutBlocker = null;
+        };
+    }
+
+    function unblockJiraShortcuts() {
+        if (jiraShortcutBlocker) {
+            jiraShortcutBlocker();
+        }
+    }
+
+    function hidePopup() {
+        const overlay = document.getElementById('qasePopupOverlay');
+        if (overlay) {
+            overlay.remove();
+            unblockJiraShortcuts();
+        }
     }
 
     function generateTitlePlaceholder() {
@@ -585,21 +638,21 @@ GM_addStyle(`
     //#endregion == Slack Functions ==
 
     function getFormRunData() {
-        const environment = document.getElementById('qaseEnv')
-        const milestone = document.getElementById('qaseMilestone')
+        const environment = shadowRoot.getElementById('qaseEnv')
+        const milestone = shadowRoot.getElementById('qaseMilestone')
 
         const environmentId = environment?.value || null;
         const enviromentText = environment?.options[environment.selectedIndex].text || null
         const milestoneId = milestone?.value || null;
         const milestoneText = milestone?.options[milestone.selectedIndex].text || null;
 
-        const configSelections = Array.from(document.querySelectorAll('.qaseConfig'))
+        const configSelections = Array.from(shadowRoot.querySelectorAll('.qaseConfig'))
             .reduce((acc, sel) => {
                 if (sel.value) acc[sel.getAttribute('data-entity-id')] = parseInt(sel.value, 10);
                 return acc;
             }, {});
 
-        const selected = document.querySelectorAll('.qase-item:checked');
+        const selected = shadowRoot.querySelectorAll('.qase-item:checked');
         const allCaseIds = [];
 
         selected.forEach(item => {
@@ -607,13 +660,13 @@ GM_addStyle(`
             allCaseIds.push(...ids);
         });
 
-        const builds = document.querySelectorAll('.teamcity-build:checked');
+        const builds = shadowRoot.querySelectorAll('.teamcity-build:checked');
         const _builds = builds.length
             ? Array.from(builds).map(b => b.dataset.id)
             : [];
 
         return {
-            title: document.getElementById('qaseRunTitle').value.trim(),
+            title: shadowRoot.getElementById('qaseRunTitle').value.trim(),
             environment: { id: environmentId, text: enviromentText },
             milestone: { id: milestoneId, text: milestoneText },
             configurations: configSelections,
@@ -673,10 +726,7 @@ GM_addStyle(`
             await associateQaseTestRunWithJira(projectCode, runData.result.id);
 
             // Remove popup after everything is done
-            const overlay = document.getElementById('qasePopupOverlay');
-            if (overlay) {
-                overlay.remove();
-            }
+            hidePopup();
 
         } catch (err) {
             console.log('Error creating test run:', err);
@@ -770,7 +820,7 @@ GM_addStyle(`
 
         const token = window.aviator?.teamcity?.token;
         const cfsrToken = await getTeamCityCsrfToken(token)
-        const builds = document.querySelectorAll('.teamcity-build:checked');
+        const builds = shadowRoot.querySelectorAll('.teamcity-build:checked');
 
         for (let b of builds) {
             const buildId = b.dataset.id;
@@ -1069,8 +1119,8 @@ GM_addStyle(`
             let html = `<h3>🚀 TeamCity Builds</h3>`
             tcBuildDetails.forEach((build) => {
                 html += `<label>
-                            <input type="checkbox" class="teamcity-build" data-id="${build.id}"> ${build.name.replace(' / ', '/')} <span
-                            class="subText">(${build.projectName})</span>
+                            <input type="checkbox" class="teamcity-build" data-id="${build.id}"> ${build.name} <span
+                            class="subText">(${build.projectName.replaceAll(' / ', '/')})</span>
                         </label>`;
             });
 
@@ -1084,8 +1134,7 @@ GM_addStyle(`
      * on submit calls createQaseTestRun()
     */
     function showPopup(issueKey, plans, externalCases, qaseConfigData, tcBuildDetails) {
-        const existing = document.getElementById('qasePopupOverlay');
-        if (existing) existing.remove();
+        hidePopup();
 
         if (!plans.length && !externalCases.length) {
             alert('No Qase Test Plans or Cases are part of this ticket');
@@ -1095,6 +1144,12 @@ GM_addStyle(`
         // create background overlay dark shadow
         const overlay = document.createElement('div');
         overlay.id = 'qasePopupOverlay';
+
+        // attach shadow dom. for css and form isolation from jira
+        shadowRoot = overlay.attachShadow({ mode: 'open' });
+        const style = document.createElement('style')
+        style.textContent = shadowStyles
+        shadowRoot.appendChild(style)
 
         // popup contents container
         const container = document.createElement('div');
@@ -1140,7 +1195,7 @@ GM_addStyle(`
         `
         container.appendChild(footer)
 
-        overlay.appendChild(container);
+        shadowRoot.appendChild(container);
 
         const modalContent = document.querySelector('[role="dialog"], .jira-dialog, .css-1ynzxqw');
         if (modalContent)
@@ -1148,7 +1203,10 @@ GM_addStyle(`
         else
             document.body.appendChild(overlay);
 
-        const runTitleInput = document.getElementById('qaseRunTitle');
+        // block jira shortcuts
+        blockJiraShortcuts();
+
+        const runTitleInput = shadowRoot.getElementById('qaseRunTitle');
         runTitleInput.value = generateTitlePlaceholder(issueKey);
 
         // --- live validation setup ---
@@ -1185,7 +1243,7 @@ GM_addStyle(`
         runTitleInput.addEventListener('input', validateRunTitle);
 
         // Handle Create Test Run click
-        document.getElementById('qaseRunBtn').onclick = async () => {
+        shadowRoot.getElementById('qaseRunBtn').onclick = async () => {
             const data = getFormRunData();
             console.log(data.caseIds)
             if (!data.caseIds.length) {
@@ -1206,8 +1264,7 @@ GM_addStyle(`
                 await createQaseTestRun();
 
                 // Close popup and loading overlay when done
-                const overlay = document.getElementById('qasePopupOverlay');
-                if (overlay) overlay.remove();
+                hidePopup();
                 hideLoading();
             } catch (err) {
                 console.error('Error creating test run:', err);
@@ -1216,13 +1273,13 @@ GM_addStyle(`
             }
         };
 
-        document.getElementById('qaseCancelBtn').onclick = () => overlay.remove();
+        shadowRoot.getElementById('qaseCancelBtn').onclick = () => hidePopup();
 
         // Toggle all checkboxes
-        const toggleBtn = document.getElementById('qaseToggleAllBtn');
+        const toggleBtn = shadowRoot.getElementById('qaseToggleAllBtn');
         let allSelected = false;
         toggleBtn.onclick = () => {
-            const checkboxes = document.querySelectorAll('.qase-item');
+            const checkboxes = shadowRoot.querySelectorAll('.qase-item');
             allSelected = !allSelected;
             checkboxes.forEach(cb => cb.checked = allSelected);
             toggleBtn.textContent = allSelected ? '🚫 Deselect All' : '☑️ Select All';
