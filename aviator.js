@@ -772,7 +772,7 @@ GM_addStyle(`
         const cfsrToken = await getTeamCityCsrfToken(token)
         const builds = document.querySelectorAll('.teamcity-build:checked');
 
-        for (b of builds) {
+        for (let b of builds) {
             const buildId = b.dataset.id;
 
             try {
