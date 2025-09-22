@@ -28,7 +28,7 @@ GM_addStyle(`
 (function () {
     'use strict';
 
-    const version = '1.0'
+    const version = '1.1'
 
     //#region == Utilities ==
     let jiraShortcutBlocker = null;
@@ -717,7 +717,7 @@ GM_addStyle(`
             console.log(`Qase: Test Run Created: ${runData.result.id}`);
 
             // Trigger any TeamCity builds
-            await triggerTeamCityBuilds(runData.result.id);
+            await triggerTeamCityBuilds(runData.result.id, data.caseIds);
 
             // send data to slack for usage tracking
             await sendResultToSlack(data)
@@ -816,7 +816,7 @@ GM_addStyle(`
     }
 
     /** trigger selected teamcity builds */
-    async function triggerTeamCityBuilds(runId) {
+    async function triggerTeamCityBuilds(runId, caseIds) {
 
         const token = window.aviator?.teamcity?.token;
         const cfsrToken = await getTeamCityCsrfToken(token)
@@ -826,6 +826,16 @@ GM_addStyle(`
             const buildId = b.dataset.id;
 
             try {
+
+                /** set to trigger a build against a runid and do not complete it */
+                let tc_properties = [
+                    { name: "env.QASE_TESTOPS_RUN_ID", value: runId },
+                    { name: "env.QASE_TESTOPS_RUN_COMPLETE", value: 'false' }
+                ]
+
+                /** optional to set parameter of qase_ids for automation to only run against those (if grep set) */
+                if (shadowRoot.getElementById('teamcity-qases-only').checked) tc_properties.push({ name: "env.QASE_IDS", value: caseIds.join(',') })
+
                 await api({
                     method: 'POST',
                     url: `https://ci.paylocity.com/app/rest/buildQueue`,
@@ -837,10 +847,7 @@ GM_addStyle(`
                     data: {
                         buildType: { id: buildId },
                         properties: {
-                            property: [
-                                { name: "env.QASE_TESTOPS_RUN_ID", value: runId },
-                                { name: "env.QASE_TESTOPS_RUN_COMPLETE", value: 'false' },
-                            ]
+                            property: tc_properties
                         }
                     }
                 })
@@ -1116,7 +1123,7 @@ GM_addStyle(`
         div.classList = 'build-list'
 
         if (tcBuildDetails.length) {
-            let html = `<h3>🚀 TeamCity Builds</h3>`
+            let html = `<h3>🚀 TeamCity Builds<label style="float: right; font-size: small; font-weight:300">run selected qases only<input type="checkbox" id="teamcity-qases-only" checked></label></h3>`
             tcBuildDetails.forEach((build) => {
                 html += `<label>
                             <input type="checkbox" class="teamcity-build" data-id="${build.id}"> ${build.name} <span
