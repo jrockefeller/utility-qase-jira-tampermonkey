@@ -160,12 +160,13 @@ The script reads its configuration from the global `window.aviator` object.
 
 | Section   | Property       | Required | Description |
 |-----------|----------------|----------|-------------|
-| **qase**  | `token`        | ✅       | API token for authenticating with Qase. |
-| **qase**  | `projectCode`  | ✅       | Project code in Qase (e.g., `DEMOS`). |
-| **qase**  | `title`        | ❌       | Custom run title template with token substitution. |
-| **qase**  | `options`        | ❌       | Options to display test run options for environment, milestones, configurations. |
-| **teamcity** | `token`     | ❌       | API token for authenticating with TeamCity (only required if using TeamCity integration). |
-| **teamcity** | `builds`    | ❌       | Array of TeamCity configuration build IDs to trigger. |
+| **qase**  | `token`         | ✅       | API token for authenticating with Qase. |
+| **qase**  | `projectCode`   | ✅       | Project code in Qase (e.g., `DEMOS`). |
+| **qase**  | `title`         | ❌       | Custom run title template with token substitution. |
+| **qase**  | `options`       | ❌       | Options to display test run options for environment, milestones, configurations. |
+| **teamcity** | `token`      | ❌       | API token for authenticating with TeamCity (only required if using TeamCity integration). |
+| **teamcity** | `builds`     | ❌       | Array of TeamCity configuration build IDs to trigger. |
+| **teamcity** | `parameters` | ❌       | Array of TeamCity env parameters to send with the build. `{name: 'param_name', value: 'value'}` |
 
 ---
 
@@ -231,6 +232,8 @@ Configuration for triggering TeamCity builds.
 |----------------|----------|----------|-------------|
 | `token`        | string   | ❌       | API token for authenticating with TeamCity. Required only if using TeamCity integration. |
 | `builds`       | string[] | ❌       | List of TeamCity configuration build IDs to trigger. Example: `["Cypress_SampleProject_TinSingleTestExample"]`. |
+| `parameters`   | string[] | ❌       | Array of TeamCity env parameters to send with the build. `{name: 'param_name', value: 'value'}` |
+
 
 **Example – Qase + TeamCity**
 ```javascript
@@ -244,6 +247,9 @@ window.aviator = {
         builds: [
             'Cypress_SampleProject_TinSingleTestExample',
             'Cypress_SampleProject_AnotherBuild'
+        ],
+        parameters: [
+            { name: 'custom_param': value: '123' }
         ]
     }
 };

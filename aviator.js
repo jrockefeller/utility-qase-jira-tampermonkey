@@ -28,7 +28,7 @@ GM_addStyle(`
 (function () {
     'use strict';
 
-    const version = '1.1'
+    const version = '1.2'
 
     //#region == Utilities ==
     let jiraShortcutBlocker = null;
@@ -832,6 +832,12 @@ GM_addStyle(`
                     { name: "env.QASE_TESTOPS_RUN_ID", value: runId },
                     { name: "env.QASE_TESTOPS_RUN_COMPLETE", value: 'false' }
                 ]
+
+                if (window.aviator?.teamcity?.parameters) {
+                    window.aviator?.teamcity?.parameters.forEach(param => {
+                        tc_properties.push({ name: `env.${param.name}`, value: param.value })
+                    })
+                }
 
                 /** optional to set parameter of qase_ids for automation to only run against those (if grep set) */
                 if (shadowRoot.getElementById('teamcity-qases-only').checked) tc_properties.push({ name: "env.QASE_IDS", value: caseIds.join(',') })
