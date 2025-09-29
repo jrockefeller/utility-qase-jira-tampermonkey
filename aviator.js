@@ -28,11 +28,12 @@ GM_addStyle(`
 (function () {
     'use strict';
 
-    const version = '1.1'
+    const version = '1.3'
 
     //#region == Utilities ==
     let jiraShortcutBlocker = null;
     let shadowRoot; // keep this global or in a closure
+    let createdRun = false; // track for when to run associate with jira function
     const shadowStyles = `
      /* Base styles for your injected popup */
     #qasePopupOverlay {
@@ -399,6 +400,10 @@ GM_addStyle(`
         }
     }
 
+    function shouldClosePopup() {
+        return (shadowRoot.getElementById('keep-open').checked) ? false : true;
+    }
+
     function hidePopup() {
         const overlay = document.getElementById('qasePopupOverlay');
         if (overlay) {
@@ -433,6 +438,28 @@ GM_addStyle(`
         if (titleFromJira) issueTitle = titleFromJira.innerText
 
         return { issueKey, issueTitle }
+    }
+
+    function addQaseTestRunsToJiraUI() {
+        const qasePanel = document.querySelector('[data-testid="issue-view-ecosystem.connect.content-panel.qase.jira.cloud__qase-runs"]');
+        if (qasePanel) { // qase panel already exists; reload to see newly associated test run
+            location.reload();
+        } else { // qase panel needs to be added
+            const appsDropdownBtn = document.querySelector('button[data-testid="issue-view-foundation.quick-add.quick-add-items-compact.apps-button-dropdown--trigger"]');
+            if (appsDropdownBtn) {
+                appsDropdownBtn.click();
+                setTimeout(() => {
+                    const qaseButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent.trim() === 'Qase: runs');
+                    if (qaseButton) {
+                        qaseButton.click();
+                    } else {
+                        console.warn('Qase button not found after opening dropdown.');
+                    }
+                }, 500); // adjust delay as needed
+            } else {
+                console.warn('Apps dropdown button not found.');
+            }
+        }
     }
 
     async function api({ method, url, headers = {}, data = null }) {
@@ -725,8 +752,8 @@ GM_addStyle(`
             // Associate with Jira AFTER run is confirmed created
             await associateQaseTestRunWithJira(projectCode, runData.result.id);
 
-            // Remove popup after everything is done
-            hidePopup();
+            // should we close the popup or keep it open for another run?
+            if (shouldClosePopup()) addQaseTestRunsToJiraUI()
 
         } catch (err) {
             console.log('Error creating test run:', err);
@@ -767,28 +794,6 @@ GM_addStyle(`
             hideLoading();
 
             console.log(`Qase: Jira issue ${issueKey} successfully associated with Run ID ${runId}.`);
-
-            // Conditional behavior
-            const qasePanel = document.querySelector('[data-testid="issue-view-ecosystem.connect.content-panel.qase.jira.cloud__qase-runs"]');
-            if (qasePanel) {
-                location.reload();
-            } else {
-                const appsDropdownBtn = document.querySelector('button[data-testid="issue-view-foundation.quick-add.quick-add-items-compact.apps-button-dropdown--trigger"]');
-                if (appsDropdownBtn) {
-                    appsDropdownBtn.click();
-                    setTimeout(() => {
-                        const qaseButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent.trim() === 'Qase: runs');
-                        if (qaseButton) {
-                            qaseButton.click();
-                        } else {
-                            console.warn('Qase button not found after opening dropdown.');
-                        }
-                    }, 500); // adjust delay as needed
-                } else {
-                    console.warn('Apps dropdown button not found.');
-                }
-            }
-
         }
         catch (e) {
             hideLoading();
@@ -832,6 +837,12 @@ GM_addStyle(`
                     { name: "env.QASE_TESTOPS_RUN_ID", value: runId },
                     { name: "env.QASE_TESTOPS_RUN_COMPLETE", value: 'false' }
                 ]
+
+                if (window.aviator?.teamcity?.parameters) {
+                    window.aviator?.teamcity?.parameters.forEach(param => {
+                        tc_properties.push({ name: `env.${param.name}`, value: param.value })
+                    })
+                }
 
                 /** optional to set parameter of qase_ids for automation to only run against those (if grep set) */
                 if (shadowRoot.getElementById('teamcity-qases-only').checked) tc_properties.push({ name: "env.QASE_IDS", value: caseIds.join(',') })
@@ -1136,12 +1147,95 @@ GM_addStyle(`
         return div
     }
 
+    function shouldShowFeaturePopup() {
+        const seenVersion = localStorage.getItem("aviatorLastFeaturePopup") || "";
+        if (seenVersion !== version) {
+            localStorage.setItem("aviatorLastFeaturePopup", version);
+            return true;
+        }
+        return false;
+    }
 
+    function showFeaturePopup() {
+        // overlay
+        const overlay = document.createElement("div");
+        Object.assign(overlay.style, {
+            position: "absolute",
+            top: "0",
+            left: "0",
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.65)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: "9999" // sits above everything inside the popup
+        });
+
+        // modal box
+        const box = document.createElement("div");
+        Object.assign(box.style, {
+            background: "#fff",
+            padding: "20px 24px",
+            borderRadius: "10px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+            maxWidth: "600px",
+            textAlign: "center",
+            fontFamily: "sans-serif",
+            color: "black"
+        });
+
+        box.innerHTML = `
+            <h2 style="margin-top:0">🚀 Aviator Changelog</h2>
+            <div style="text-align:left; font-size:14px; line-height:1.5">
+                <div style="background:#fff; padding:12px; border-radius:6px; margin-bottom:8px;">
+                <strong>v1.3</strong> – New <code>keep open</code> checkbox added to keep modal open for multiple test run creations.
+                </div>
+
+                <div style="background:#f9f9f9; padding:12px; border-radius:6px; margin-bottom:8px;">
+                <strong>v1.2</strong> – Configure custom parameters to send with TeamCity builds.
+                See <a href="https://github.com/jrockefeller/utility-qase-jira-tampermonkey/blob/main/README.md" target="_blank">README.md</a> for details.
+                <pre style="background:#eee; padding:8px; border-radius:4px; overflow-x:auto; margin-top:6px">
+teamcity: {
+    parameters: [
+        { name: 'custom_param', value: '123' }
+    ]
+}</pre>
+                </div>
+
+                <div style="background:#fff; padding:12px; border-radius:6px; margin-bottom:8px;">
+                <strong>v1.1</strong> – Checkbox to send only selected QaseIds in TeamCity build parameter <code>env.QASE_IDS</code>.
+                </div>
+
+                <div style="background:#f9f9f9; padding:12px; border-radius:6px;">
+                <strong>v1.0</strong> – Aviator runs in <code>shadowRoot</code>! Isolates from Jira hot keys.
+                </div>
+            </div>
+            <button id="feature-ok" style="
+                margin-top:16px;
+                padding:8px 16px;
+                background:#007bff;
+                border:none;
+                color:white;
+                border-radius:6px;
+                font-size:14px;
+                cursor:pointer;
+            ">Got it</button>
+            `;
+
+        overlay.appendChild(box);
+        shadowRoot.appendChild(overlay);
+
+        overlay.querySelector("#feature-ok").addEventListener("click", () => {
+            overlay.remove();
+        });
+    }
     /** present popup UI
      * on submit calls createQaseTestRun()
     */
     function showPopup(issueKey, plans, externalCases, qaseConfigData, tcBuildDetails) {
         hidePopup();
+        createdRun = false; // reset for this popup session
 
         if (!plans.length && !externalCases.length) {
             alert('No Qase Test Plans or Cases are part of this ticket');
@@ -1169,6 +1263,7 @@ GM_addStyle(`
                 <div class="popup-title">
                     <h2>Aviator</h2>
                     <small>v${version}</small>
+                    <label style="margin-left: auto"><input type="checkbox" id="keep-open" />keep open</label>
                 </div>
                 <p>Create a Test Run in Qase by selecting a combination of test plans and cases.</p>`
         container.appendChild(header)
@@ -1271,8 +1366,9 @@ GM_addStyle(`
                 await createQaseTestRun();
 
                 // Close popup and loading overlay when done
-                hidePopup();
+                if (shouldClosePopup()) hidePopup();
                 hideLoading();
+                createdRun = true; // flag for jira UI update
             } catch (err) {
                 console.error('Error creating test run:', err);
                 hideLoading();
@@ -1280,7 +1376,10 @@ GM_addStyle(`
             }
         };
 
-        shadowRoot.getElementById('qaseCancelBtn').onclick = () => hidePopup();
+        shadowRoot.getElementById('qaseCancelBtn').onclick = () => {
+            hidePopup()
+            if (createdRun) addQaseTestRunsToJiraUI() // if a run was created, update the jira UI when closing
+        };
 
         // Toggle all checkboxes
         const toggleBtn = shadowRoot.getElementById('qaseToggleAllBtn');
@@ -1291,6 +1390,11 @@ GM_addStyle(`
             checkboxes.forEach(cb => cb.checked = allSelected);
             toggleBtn.textContent = allSelected ? '🚫 Deselect All' : '☑️ Select All';
         };
+
+        // then run feature popup once per version
+        if (shouldShowFeaturePopup()) {
+            showFeaturePopup(shadowRoot);
+        }
     }
 
     /** entrance point to the script */

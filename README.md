@@ -50,8 +50,6 @@ A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and 
 // @connect      ci.paylocity.com
 // @connect      raw.githubusercontent.com
 // @connect      hooks.slack.com
-// @updateURL    https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/main/aviator.js
-// @downloadURL  https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/main/aviator.js
 // ==/UserScript==
 
 (async () => {
@@ -72,6 +70,9 @@ A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and 
             token: '<REPLACE WITH YOUR OWN TEAMCITY TOKEN>',
             builds: [
                 '<YOUR TEAMCITY BUILDS - IF YOU HAVE NONE TO INTEGRATE THEN IGNORE THIS SECTION>'
+            ],
+            parameters: [
+                { name: 'THE_PARAMETER', value: 'wooooooooooooo' }
             ]
         }
         */
@@ -166,6 +167,7 @@ The script reads its configuration from the global `window.aviator` object.
 | **qase**  | `options`        | ❌       | Options to display test run options for environment, milestones, configurations. |
 | **teamcity** | `token`     | ❌       | API token for authenticating with TeamCity (only required if using TeamCity integration). |
 | **teamcity** | `builds`    | ❌       | Array of TeamCity configuration build IDs to trigger. |
+| **teamcity** | `parameters` | ❌      | Optional environment parameters to send with teamcity build trigger |
 
 ---
 
@@ -231,6 +233,7 @@ Configuration for triggering TeamCity builds.
 |----------------|----------|----------|-------------|
 | `token`        | string   | ❌       | API token for authenticating with TeamCity. Required only if using TeamCity integration. |
 | `builds`       | string[] | ❌       | List of TeamCity configuration build IDs to trigger. Example: `["Cypress_SampleProject_TinSingleTestExample"]`. |
+| `parameters`   | string[] | ❌       | List of TeamCity parameters to send with the build. |
 
 **Example – Qase + TeamCity**
 ```javascript
@@ -244,6 +247,9 @@ window.aviator = {
         builds: [
             'Cypress_SampleProject_TinSingleTestExample',
             'Cypress_SampleProject_AnotherBuild'
+        ],
+        parameters: [
+            { name: 'my_parameter': value: '12345' }
         ]
     }
 };

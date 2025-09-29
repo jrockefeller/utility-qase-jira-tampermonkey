@@ -10,8 +10,6 @@
 // @connect      ci.paylocity.com
 // @connect      raw.githubusercontent.com
 // @connect      hooks.slack.com
-// @updateURL    https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/main/aviator.js
-// @downloadURL  https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/main/aviator.js
 // ==/UserScript==
 
 (async () => {
@@ -32,6 +30,9 @@
             token: '<REPLACE WITH YOUR OWN TEAMCITY TOKEN>',
             builds: [
                 '<YOUR TEAMCITY BUILDS - IF YOU HAVE NONE TO INTEGRATE THEN IGNORE THIS SECTION>'
+            ],
+            parameters: [
+                { name: 'THE_PARAMETER', value: 'wooooooooooooo' }
             ]
         }
         */
