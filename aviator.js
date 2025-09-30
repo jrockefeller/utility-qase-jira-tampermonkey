@@ -30,7 +30,7 @@ GM_addStyle(`
 
     const version = '1.3'
 
-    //#region == Utilities ==
+     //#region == Utilities ==
     let jiraShortcutBlocker = null;
     let shadowRoot; // keep this global or in a closure
     let createdRun = false; // track for when to run associate with jira function
@@ -47,7 +47,7 @@ GM_addStyle(`
         /* stay above Jira */
     }
 
-    #qasePopup {
+    .qasePopup {
         background: var(--bg);
         padding: 25px;
         border-radius: 12px;
@@ -65,7 +65,7 @@ GM_addStyle(`
     }
 
     /* Two-column shell */
-    #qasePopup .column {
+    .qasePopup .column {
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -76,7 +76,7 @@ GM_addStyle(`
 
     /* Light mode */
     @media (prefers-color-scheme: light) {
-        #qasePopup {
+        .qasePopup {
             background: #fff;
             color: #222;
             --bg: #ffffff;
@@ -90,7 +90,7 @@ GM_addStyle(`
             --secondary-hover: #ddd;
         }
 
-        #qasePopup .test-case-list>label {
+        .qasePopup .test-case-list>label {
             display: block;
             padding: 6px;
             margin-bottom: 2px;
@@ -99,23 +99,23 @@ GM_addStyle(`
             /* always readable */
         }
 
-        #qasePopup .test-case-list>label:nth-child(odd) {
+        .qasePopup .test-case-list>label:nth-child(odd) {
             background: #e6f0ff;
         }
 
-        #qasePopup .test-case-list>label:nth-child(even) {
+        .qasePopup .test-case-list>label:nth-child(even) {
             background: #F0F0F0;
         }
 
     }
 
-    #qasePopup .test-case-list:nth-child(odd) {
+    .qasePopup .test-case-list:nth-child(odd) {
         margin-bottom: 15px;
     }
 
     /* Dark mode */
     @media (prefers-color-scheme: dark) {
-        #qasePopup {
+        .qasePopup {
             background: #1e1e1e;
             color: #f1f1f1;
             --bg: #1e1e1e;
@@ -129,7 +129,7 @@ GM_addStyle(`
             --secondary-hover: #444;
         }
 
-        #qasePopup .test-case-list>label {
+        .qasePopup .test-case-list>label {
             display: block;
             padding: 6px;
             margin-bottom: 2px;
@@ -139,40 +139,40 @@ GM_addStyle(`
             /* always readable */
         }
 
-        #qasePopup .test-case-list>label:nth-child(odd) {
+        .qasePopup .test-case-list>label:nth-child(odd) {
            /* background: #E6E6FF; */
            background: #54545E;
         }
 
-        #qasePopup .test-case-list>label:nth-child(even) {
+        .qasePopup .test-case-list>label:nth-child(even) {
            /* background: #F0F0F0; */
            background: #35353D;
         }
 
     }
 
-    #qasePopup .popup-header {
+    .qasePopup .popup-header {
         margin-bottom: 20px;
     }
 
-    #qasePopup .popup-title {
+    .qasePopup .popup-title {
         display: flex;
         align-items: flex-end;
         gap: 8px;
     }
 
-    #qasePopup .popup-title h2 {
+    .qasePopup .popup-title h2 {
         margin: 0;
         font-size: 1.8rem;
         color: var(--text);
     }
 
-    #qasePopup .popup-title small {
+    .qasePopup .popup-title small {
         color: var(--text-muted);
         font-size: 0.85rem;
     }
 
-    #qasePopup .popup-body {
+    .qasePopup .popup-body {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 24px;
@@ -180,7 +180,7 @@ GM_addStyle(`
         overflow: hidden;
     }
 
-    #qasePopup .popup-column {
+    .qasePopup .popup-column {
         background: var(--bg-card);
         padding: 15px;
         border-radius: 8px;
@@ -188,7 +188,7 @@ GM_addStyle(`
         border: 1px solid var(--border);
     }
 
-    #qasePopup h3 {
+    .qasePopup h3 {
         margin-top: 0;
         margin-bottom: 12px;
         font-size: 1.1rem;
@@ -196,13 +196,13 @@ GM_addStyle(`
         padding-bottom: 6px;
     }
 
-    #qasePopup label {
+    .qasePopup label {
         margin-bottom: 10px;
         color: var(--text);
     }
 
-    #qasePopup input[type="text"],
-    #qasePopup select {
+    .qasePopup input[type="text"],
+    .qasePopup select {
         width: 100%;
         padding: 8px 10px;
         border: 1px solid var(--border);
@@ -213,28 +213,28 @@ GM_addStyle(`
         color: var(--text);
     }
 
-    #qasePopup #qaseRunTitle {
+    .qasePopup #qaseRunTitle {
        width: 96%;
     }
 
-    #qasePopup input[type="checkbox"] {
+    .qasePopup input[type="checkbox"] {
         accent-color: var(--primary);
     }
 
-    #qasePopup .grid-2 {
+    .qasePopup .grid-2 {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 0px 10px;
     }
 
-    #qasePopup .popup-footer {
+    .qasePopup .popup-footer {
         margin-top: 20px;
         display: flex;
         justify-content: flex-end;
         gap: 12px;
     }
 
-    #qasePopup .btn {
+    .qasePopup .btn {
         padding: 8px 16px;
         border-radius: 6px;
         border: none;
@@ -243,43 +243,43 @@ GM_addStyle(`
         transition: all 0.2s ease;
     }
 
-    #qasePopup .btn.primary {
+    .qasePopup .btn.primary {
         background: var(--primary);
         color: #fff;
     }
 
-    #qasePopup .btn.primary:hover {
+    .qasePopup .btn.primary:hover {
         background: var(--primary-hover);
     }
 
-    #qasePopup .btn.secondary {
+    .qasePopup .btn.secondary {
         background: var(--secondary);
         color: var(--text);
     }
 
-    #qasePopup .btn.secondary:hover {
+    .qasePopup .btn.secondary:hover {
         background: var(--secondary-hover);
     }
 
     @media (max-width: 700px) {
-        #qasePopup .popup-body {
+        .qasePopup .popup-body {
             grid-template-columns: 1fr;
         }
     }
 
-    #qasePopup .subText {
+    .qasePopup .subText {
         color: #737373;
         font-size: 0.85rem;
     }
 
-    #qasePopup #qaseToggleAllBtn {
+    .qasePopup #qaseToggleAllBtn {
         color: black;
         background: #F4F5F7;
         border: 1px solid #ccc;
         margin-right: auto;
     }
 
-    #qasePopup .build-list>label {
+    .qasePopup .build-list>label {
         display:block;
     }
 `
@@ -291,7 +291,7 @@ GM_addStyle(`
     function checkQaseApiToken() {
         const token = getQaseApiToken();
         if (!token) {
-            alert('⚠️ No Qase API token set. Use the Tampermonkey menu to set it.');
+            alert('⚠️ No Qase API token set.');
             return false;
         }
         return true;
@@ -304,7 +304,7 @@ GM_addStyle(`
     function checkQaseProjectCode() {
         const code = getQaseProjectCode();
         if (!code) {
-            alert('⚠️ No Qase Project Code set. Use the Tampermonkey menu to set it.');
+            alert('⚠️ No Qase Project Code set.');
             return false;
         }
         return true;
@@ -712,12 +712,12 @@ GM_addStyle(`
         const data = getFormRunData()
 
         if (data.caseIds.length === 0) {
-            alert('No test cases selected!');
+            showMessagePopup('No test cases selected!');
             return;
         }
 
         if (!data.title) {
-            alert('No test run title entered!');
+            showMessagePopup('No test run title entered!');
             return;
         }
 
@@ -757,7 +757,7 @@ GM_addStyle(`
 
         } catch (err) {
             console.log('Error creating test run:', err);
-            alert('Failed to create Qase test run. See console for details.');
+            showMessagePopup('Failed to create Qase test run. See console for details.');
         }
     }
 
@@ -770,7 +770,7 @@ GM_addStyle(`
 
         let { issueKey } = getJiraIssueDetails()
         if (!issueKey) {
-            alert('Could not detect Jira issue ID in URL for association.');
+            showMessagePopup('Could not detect Jira issue ID in URL for association.');
             return;
         }
 
@@ -1147,16 +1147,7 @@ GM_addStyle(`
         return div
     }
 
-    function shouldShowFeaturePopup() {
-        const seenVersion = localStorage.getItem("aviatorLastFeaturePopup") || "";
-        if (seenVersion !== version) {
-            localStorage.setItem("aviatorLastFeaturePopup", version);
-            return true;
-        }
-        return false;
-    }
-
-    function showFeaturePopup() {
+    function showMessagePopup(message) {
         // overlay
         const overlay = document.createElement("div");
         Object.assign(overlay.style, {
@@ -1174,53 +1165,113 @@ GM_addStyle(`
 
         // modal box
         const box = document.createElement("div");
+        box.classList = 'qasePopup'
         Object.assign(box.style, {
-            background: "#fff",
             padding: "20px 24px",
             borderRadius: "10px",
             boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-            maxWidth: "600px",
-            textAlign: "center",
-            fontFamily: "sans-serif",
-            color: "black"
+            /* size behavior */
+            minWidth: "250px",   // won’t shrink below this
+            maxWidth: "600px",   // won’t grow beyond this
+            width: "auto",       // lets it size based on content
+            boxSizing: "border-box",
+            /* layout */
+            display: "flex",
+            flexDirection: "column",   // stack title, text, button
+            justifyContent: "center",
+            alignItems: "center",
+        });
+
+
+        box.innerHTML = `
+            <h2 style="margin-top:0">🔒 Oops 🔒</h2>
+            <div font-size:14px; line-height:1.5">
+                ${message}
+            </div>
+            <button id="oops-ok" class="btn primary" style="margin-top: 10px">Got it</button>
+            `;
+
+        /*  */
+
+        overlay.appendChild(box);
+        shadowRoot.appendChild(overlay);
+
+        overlay.querySelector("#oops-ok").addEventListener("click", () => {
+            overlay.remove();
+        });
+    }
+
+    function shouldShowFeaturePopup() {
+        const seenVersion = localStorage.getItem("aviatorLastFeaturePopup") || "";
+        if (seenVersion !== version) {
+            localStorage.setItem("aviatorLastFeaturePopup", version);
+            return true;
+        }
+        return false;
+    }
+
+    function showFeaturePopup() {
+         // overlay
+        const overlay = document.createElement("div");
+        Object.assign(overlay.style, {
+            position: "absolute",
+            top: "0",
+            left: "0",
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.65)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: "9999" // sits above everything inside the popup
+        });
+
+        // modal box
+        const box = document.createElement("div");
+        box.classList = 'qasePopup'
+        Object.assign(box.style, {
+            padding: "20px 24px",
+            borderRadius: "10px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+            /* size behavior */
+            minWidth: "250px",   // won’t shrink below this
+            maxWidth: "600px",   // won’t grow beyond this
+            width: "auto",       // lets it size based on content
+            boxSizing: "border-box",
+            /* layout */
+            display: "flex",
+            flexDirection: "column",   // stack title, text, button
+            justifyContent: "center",
+            alignItems: "center",
         });
 
         box.innerHTML = `
-            <h2 style="margin-top:0">🚀 Aviator Changelog</h2>
-            <div style="text-align:left; font-size:14px; line-height:1.5">
-                <div style="background:#fff; padding:12px; border-radius:6px; margin-bottom:8px;">
+            <h2 style="margin-top:0">🚀 Aviator Changelog 🚀</h2>
+            <div class="test-case-list">
+                <label>
                 <strong>v1.3</strong> – New <code>keep open</code> checkbox added to keep modal open for multiple test run creations.
-                </div>
+                </label>
 
-                <div style="background:#f9f9f9; padding:12px; border-radius:6px; margin-bottom:8px;">
+                <label>
                 <strong>v1.2</strong> – Configure custom parameters to send with TeamCity builds.
                 See <a href="https://github.com/jrockefeller/utility-qase-jira-tampermonkey/blob/main/README.md" target="_blank">README.md</a> for details.
-                <pre style="background:#eee; padding:8px; border-radius:4px; overflow-x:auto; margin-top:6px">
+                <pre style="padding:8px; border-radius:4px; overflow-x:auto; margin-top:6px">
 teamcity: {
     parameters: [
         { name: 'custom_param', value: '123' }
     ]
 }</pre>
-                </div>
+                </label>
 
-                <div style="background:#fff; padding:12px; border-radius:6px; margin-bottom:8px;">
+                <label>
                 <strong>v1.1</strong> – Checkbox to send only selected QaseIds in TeamCity build parameter <code>env.QASE_IDS</code>.
-                </div>
+                </label>
 
-                <div style="background:#f9f9f9; padding:12px; border-radius:6px;">
+                <label>
                 <strong>v1.0</strong> – Aviator runs in <code>shadowRoot</code>! Isolates from Jira hot keys.
-                </div>
+                </label>
             </div>
-            <button id="feature-ok" style="
-                margin-top:16px;
-                padding:8px 16px;
-                background:#007bff;
-                border:none;
-                color:white;
-                border-radius:6px;
-                font-size:14px;
-                cursor:pointer;
-            ">Got it</button>
+              <button id="feature-ok" class="btn primary" style="margin-top: 10px">Got it</button>
             `;
 
         overlay.appendChild(box);
@@ -1254,7 +1305,7 @@ teamcity: {
 
         // popup contents container
         const container = document.createElement('div');
-        container.id = 'qasePopup';
+        container.classList = 'qasePopup';
 
         // header
         const header = document.createElement('div')
@@ -1349,7 +1400,7 @@ teamcity: {
             const data = getFormRunData();
             console.log(data.caseIds)
             if (!data.caseIds.length) {
-                alert('No test cases selected!');
+                showMessagePopup('No test cases selected!');
                 return;
             }
 
@@ -1372,7 +1423,7 @@ teamcity: {
             } catch (err) {
                 console.error('Error creating test run:', err);
                 hideLoading();
-                alert('Failed to create Test Run. See console for details.');
+                showMessagePopup('Failed to create Test Run. See console for details.');
             }
         };
 
