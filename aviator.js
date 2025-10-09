@@ -28,9 +28,9 @@ GM_addStyle(`
 (function () {
     'use strict';
 
-    const version = '1.3'
+    const version = '1.4'
 
-     //#region == Utilities ==
+    //#region == Utilities ==
     let jiraShortcutBlocker = null;
     let shadowRoot; // keep this global or in a closure
     let createdRun = false; // track for when to run associate with jira function
@@ -291,7 +291,7 @@ GM_addStyle(`
     function checkQaseApiToken() {
         const token = getQaseApiToken();
         if (!token) {
-            alert('⚠️ No Qase API token set.');
+            showMessagePopup('⚠️ No Qase API token set.', hidePopup)
             return false;
         }
         return true;
@@ -304,7 +304,7 @@ GM_addStyle(`
     function checkQaseProjectCode() {
         const code = getQaseProjectCode();
         if (!code) {
-            alert('⚠️ No Qase Project Code set.');
+            showMessagePopup('⚠️ No Qase Project Code set.', hidePopup)
             return false;
         }
         return true;
@@ -535,6 +535,15 @@ GM_addStyle(`
         });
     }
 
+    async function verifyConnectToQase(projectCode) {
+        const token = getQaseApiToken();
+        const data = await api({
+            method: 'GET', url: `https://api.qase.io/v1/project/${projectCode}`,
+            headers: { Token: token }
+        })
+        return (!data.status && data.status == false) ? false : true;
+    }
+
     /** calls Qase Api to get plan details with plan qase test ids */
     async function fetchQaseTestPlanDetails(projectCode, planId) {
         const token = getQaseApiToken();
@@ -561,9 +570,12 @@ GM_addStyle(`
             method: 'GET', url: `https://api.qase.io/v1/case/${projectCode}?external_issues[type]=jira-cloud&external_issues[ids][]=${issueKey}&limit=50`,
             headers: { Token: token }
         })
+
+        if (!data.result) {
+            return []
+        }
         const caseItems = data.result.entities.map(e => ({ id: e.id, title: e.title }));
         return caseItems;
-
     }
 
     async function fetchQaseEnvironments() {
@@ -576,6 +588,9 @@ GM_addStyle(`
             headers: { 'Accept': 'application/json', token: token }
         })
 
+        if (!data.result) {
+            return []
+        }
         return data.result.entities
     }
 
@@ -589,6 +604,9 @@ GM_addStyle(`
             headers: { 'Accept': 'application/json', token: token }
         })
 
+        if (!data.result) {
+            return []
+        }
         return data.result.entities
     }
 
@@ -602,6 +620,9 @@ GM_addStyle(`
             headers: { 'Accept': 'application/json', token: token }
         })
 
+        if (!data.result) {
+            return []
+        }
         return data.result.entities
     }
 
@@ -1028,7 +1049,14 @@ GM_addStyle(`
 
         if (!plans.length && !issueKey) {
             hideLoading();
-            alert('No Qase plans or Jira issue key found.');
+            showMessagePopup('No Qase plans or Jira issue key found.', hidePopup)
+            return;
+        }
+
+        /** check qase connection to verify can show the popup */
+        if (await verifyConnectToQase()) {
+            hideLoading();
+            showMessagePopup('Error connecting to Qase. Check your token and project are correct', hidePopup)
             return;
         }
 
@@ -1147,7 +1175,9 @@ GM_addStyle(`
         return div
     }
 
-    function showMessagePopup(message) {
+    function showMessagePopup(message, onClose) {
+
+        createShadowRootOverlay()
         // overlay
         const overlay = document.createElement("div");
         Object.assign(overlay.style, {
@@ -1198,6 +1228,10 @@ GM_addStyle(`
 
         overlay.querySelector("#oops-ok").addEventListener("click", () => {
             overlay.remove();
+
+            if (typeof onClose == 'function') {
+                onClose();
+            }
         });
     }
 
@@ -1211,7 +1245,7 @@ GM_addStyle(`
     }
 
     function showFeaturePopup() {
-         // overlay
+        // overlay
         const overlay = document.createElement("div");
         Object.assign(overlay.style, {
             position: "absolute",
@@ -1249,6 +1283,10 @@ GM_addStyle(`
             <h2 style="margin-top:0">🚀 Aviator Changelog 🚀</h2>
             <div class="test-case-list">
                 <label>
+                <strong>v1.4</strong> – Consolidated error messaging. Handle incorrect configuration more gracefully.
+                </label>
+
+                <label>
                 <strong>v1.3</strong> – New <code>keep open</code> checkbox added to keep modal open for multiple test run creations.
                 </label>
 
@@ -1281,6 +1319,27 @@ teamcity: {
             overlay.remove();
         });
     }
+
+    function createShadowRootOverlay() {
+        let overlay = document.getElementById('qasePopupOverlay');
+        if (!overlay) {
+            // Create background overlay
+            overlay = document.createElement('div');
+            overlay.id = 'qasePopupOverlay';
+            document.body.appendChild(overlay); // <-- make sure it's in the DOM
+        }
+
+        // Ensure the shadow root exists
+        if (!overlay.shadowRoot) {
+            shadowRoot = overlay.attachShadow({ mode: 'open' });
+            const style = document.createElement('style');
+            style.textContent = shadowStyles;
+            shadowRoot.appendChild(style);
+        }
+
+        return overlay
+    }
+
     /** present popup UI
      * on submit calls createQaseTestRun()
     */
@@ -1289,19 +1348,11 @@ teamcity: {
         createdRun = false; // reset for this popup session
 
         if (!plans.length && !externalCases.length) {
-            alert('No Qase Test Plans or Cases are part of this ticket');
+            showMessagePopup('No Qase Test Plans or Cases are part of this ticket', hidePopup)
             return;
         }
 
-        // create background overlay dark shadow
-        const overlay = document.createElement('div');
-        overlay.id = 'qasePopupOverlay';
-
-        // attach shadow dom. for css and form isolation from jira
-        shadowRoot = overlay.attachShadow({ mode: 'open' });
-        const style = document.createElement('style')
-        style.textContent = shadowStyles
-        shadowRoot.appendChild(style)
+        const overlay = createShadowRootOverlay()
 
         // popup contents container
         const container = document.createElement('div');
@@ -1351,10 +1402,12 @@ teamcity: {
         shadowRoot.appendChild(container);
 
         const modalContent = document.querySelector('[role="dialog"], .jira-dialog, .css-1ynzxqw');
-        if (modalContent)
+        if (modalContent) {
             modalContent.appendChild(overlay)
-        else
+        }
+        else {
             document.body.appendChild(overlay);
+        }
 
         // block jira shortcuts
         blockJiraShortcuts();
