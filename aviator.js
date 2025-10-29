@@ -28,7 +28,7 @@ GM_addStyle(`
 (function () {
     'use strict';
 
-    const version = '1.4'
+    const version = '1.4.1'
 
     //#region == Utilities ==
     let jiraShortcutBlocker = null;
@@ -980,12 +980,26 @@ GM_addStyle(`
         };
 
         /** funciton: add button when in backlog and ticket is selected */
-        const insertInBacklogSidebar = () => {
+        const insertInSidebar = () => {
             if (document.querySelector('#qaseScrapeButton')) return;
-            const statusButton = document.querySelector('button.issue.fields.status-view.status-button');
-            if (statusButton && statusButton.parentElement) {
-                statusButton.parentElement.appendChild(createButton());
-            }
+            const header = document.querySelector('div[data-testid="issue.views.issue-details.issue-layout.compact-layout"]');
+            if (!header) return;
+            const bar = document.createElement('div');
+            bar.id = 'qaseTopBar';
+            bar.style = `
+            //width: 100%;
+            background: ${isDarkMode ? '#1f1f21' : 'white'};
+            color: ${isDarkMode ? '#a9abaf' : 'white'};
+            padding: 8px 16px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        `;
+            bar.appendChild(createButton());
+            header.parentElement.insertBefore(bar, header);
         };
 
         /** function: decides where to put the button */
@@ -996,6 +1010,10 @@ GM_addStyle(`
                 const interval = setInterval(() => {
                     if (document.querySelector('div#jira-issue-header')) {
                         insertForModal();
+                        clearInterval(interval);
+                    }
+                    else if (document.querySelector('div[data-testid="issue.views.issue-details.issue-layout.compact-layout"]')) {
+                        insertInSidebar();
                         clearInterval(interval);
                     }
                 }, 500);
@@ -1010,6 +1028,10 @@ GM_addStyle(`
                 const interval = setInterval(() => {
                     if (document.querySelector('div#jira-issue-header')) {
                         insertForModal();
+                        clearInterval(interval);
+                    }
+                    else if (document.querySelector('div[data-testid="issue.views.issue-details.issue-layout.compact-layout"]')) {
+                        insertInSidebar();
                         clearInterval(interval);
                     }
                 }, 500);
@@ -1282,6 +1304,10 @@ GM_addStyle(`
         box.innerHTML = `
             <h2 style="margin-top:0">🚀 Aviator Changelog 🚀</h2>
             <div class="test-case-list">
+                <label>
+                <strong>v1.4.1</strong> – Fixed issue with Jira sidebars not displaying Aviator button.
+                </label>
+
                 <label>
                 <strong>v1.4</strong> – Consolidated error messaging. Handle incorrect configuration more gracefully.
                 </label>
