@@ -28,7 +28,7 @@ GM_addStyle(`
 (function () {
     'use strict';
 
-    const version = '1.4.1'
+    const version = '1.4.2'
 
     //#region == Utilities ==
     let jiraShortcutBlocker = null;
@@ -1186,10 +1186,22 @@ GM_addStyle(`
         if (tcBuildDetails.length) {
             let html = `<h3>🚀 TeamCity Builds<label style="float: right; font-size: small; font-weight:300">run selected qases only<input type="checkbox" id="teamcity-qases-only" checked></label></h3>`
             tcBuildDetails.forEach((build) => {
-                html += `<label>
+                // Check if this is an error string instead of a build object
+                if (typeof build === 'string') {
+                    // Extract build ID from error message if possible
+                    const buildIdMatch = build.match(/id '([^']+)'/);
+                    const buildId = buildIdMatch ? buildIdMatch[1] : 'Unknown Build';
+
+                    html += `<label style="color: #ff6b6b; opacity: 0.8;">
+                            ❌ ${buildId} <span class="subText">(Build not found or access denied)</span>
+                        </label>`;
+                } else {
+                    // Normal build object
+                    html += `<label>
                             <input type="checkbox" class="teamcity-build" data-id="${build.id}"> ${build.name} <span
                             class="subText">(${build.projectName.replaceAll(' / ', '/')})</span>
                         </label>`;
+                }
             });
 
             div.innerHTML = html
@@ -1304,6 +1316,10 @@ GM_addStyle(`
         box.innerHTML = `
             <h2 style="margin-top:0">🚀 Aviator Changelog 🚀</h2>
             <div class="test-case-list">
+                <label>
+                <strong>v1.4.2</strong> – Gracefully handle TeamCity build fetch errors. Display to user in modal.
+                </label>
+
                 <label>
                 <strong>v1.4.1</strong> – Fixed issue with Jira sidebars not displaying Aviator button.
                 </label>
