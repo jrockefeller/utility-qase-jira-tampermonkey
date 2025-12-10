@@ -566,48 +566,97 @@ GM_addStyle(`
     async function fetchQaseTestCases(projectCode, issueKey) {
         const token = getQaseApiToken();
 
-        const data = await api({
-            method: 'GET', url: `https://api.qase.io/v1/case/${projectCode}?external_issues[type]=jira-cloud&external_issues[ids][]=${issueKey}&limit=50`,
-            headers: { Token: token }
-        })
+        let allCases = [];
+        let offset = 0;
+        const limit = 100;
+        let hasMore = true;
 
-        if (!data.result) {
-            return []
+        while (hasMore) {
+            const data = await api({
+                method: 'GET',
+                url: `https://api.qase.io/v1/case/${projectCode}?external_issues[type]=jira-cloud&external_issues[ids][]=${issueKey}&limit=${limit}&offset=${offset}`,
+                headers: { Token: token }
+            });
+
+            if (!data.result) {
+                return allCases;
+            }
+
+            // Add current page of cases to our collection
+            const caseItems = data.result.entities.map(e => ({ id: e.id, title: e.title }));
+            allCases.push(...caseItems);
+
+            // Check if we have more pages to fetch
+            const total = data.result.total;
+            offset += limit;
+            hasMore = offset < total;
         }
-        const caseItems = data.result.entities.map(e => ({ id: e.id, title: e.title }));
-        return caseItems;
+
+        return allCases;
     }
 
     async function fetchQaseEnvironments() {
         const token = getQaseApiToken();
         const projectCode = getQaseProjectCode();
 
-        const data = await api({
-            method: 'GET',
-            url: `https://api.qase.io/v1/environment/${projectCode}?limit=100&offset=0`,
-            headers: { 'Accept': 'application/json', token: token }
-        })
+        let allEnvironments = [];
+        let offset = 0;
+        const limit = 100;
+        let hasMore = true;
 
-        if (!data.result) {
-            return []
+        while (hasMore) {
+            const data = await api({
+                method: 'GET',
+                url: `https://api.qase.io/v1/environment/${projectCode}?limit=${limit}&offset=${offset}`,
+                headers: { 'Accept': 'application/json', token: token }
+            });
+
+            if (!data.result) {
+                return allEnvironments;
+            }
+
+            // Add current page of environments to our collection
+            allEnvironments.push(...data.result.entities);
+
+            // Check if we have more pages to fetch
+            const total = data.result.total;
+            offset += limit;
+            hasMore = offset < total;
         }
-        return data.result.entities
+
+        return allEnvironments;
     }
 
     async function fetchQaseMilestones() {
         const token = getQaseApiToken();
         const projectCode = getQaseProjectCode();
 
-        const data = await api({
-            method: 'GET',
-            url: `https://api.qase.io/v1/milestone/${projectCode}?limit=10&offset=00`,
-            headers: { 'Accept': 'application/json', token: token }
-        })
+        let allMilestones = [];
+        let offset = 0;
+        const limit = 100;
+        let hasMore = true;
 
-        if (!data.result) {
-            return []
+        while (hasMore) {
+            const data = await api({
+                method: 'GET',
+                url: `https://api.qase.io/v1/milestone/${projectCode}?limit=${limit}&offset=${offset}`,
+                headers: { 'Accept': 'application/json', token: token }
+            });
+
+            if (!data.result) {
+                return allMilestones;
+            }
+
+            // Add current page of milestones to our collection
+            allMilestones.push(...data.result.entities);
+
+            // Check if we have more pages to fetch
+            const total = data.result.total;
+            offset += limit;
+            hasMore = offset < total;
         }
-        return data.result.entities
+
+        return allMilestones;
     }
 
     async function fetchQaseConfigurations() {
