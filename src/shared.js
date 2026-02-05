@@ -1978,13 +1978,13 @@ const AviatorShared = {
         },
 
         htmlTestPlans: function (plans) {
-            if (!plans.length) {
-                return null;
-            }
-
             const plansDiv = document.createElement('div')
             plansDiv.id = 'test-plans-section'
             plansDiv.classList = 'test-case-list'
+
+            if (!plans.length) {
+                return plansDiv;
+            }
 
             const title = document.createElement('h3');
             title.textContent = '📦 Test Plans';
@@ -2006,13 +2006,13 @@ const AviatorShared = {
         },
 
         htmlTestCases: function (externalCases) {
-            if (!externalCases.length) {
-                return null;
-            }
-
             const div = document.createElement('div')
             div.id = 'test-cases-section'
             div.classList = 'test-case-list'
+
+            if (!externalCases.length) {
+                return div;
+            }
 
             let html = `<h3>🔗 Linked Test Cases</h3>`
             externalCases.forEach((item) => {
@@ -2174,7 +2174,6 @@ const AviatorShared = {
             const div = document.createElement('div')
             div.id = 'teamcity-builds-section'
 
-
             if (!tcBuildData || (!tcBuildData.flatBuilds?.length && !tcBuildData.projectStructure?.length)) {
                 return div;
             }
@@ -2304,7 +2303,6 @@ const AviatorShared = {
             div.innerHTML = html;
             return div;
         },
-
 
     },
 
