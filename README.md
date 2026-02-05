@@ -1,22 +1,21 @@
 # 🐙 Qase - Jira - Tampermonkey
 
-A nerdy Tampermonkey userscript for Jira Cloud that scrapes Qase test plans and linked test cases from Jira issue pages — then builds a test run on Qase, associating it back to the Jira issue.  
+A Tampermonkey script to consolidate Jira + Qase + Teamcity to present users a modal that allows them to select test cases/plans, create a test run, launch automation in teamcity and link back all from a Jira ticket.
 
 ---
 
 ## 📦 What It Does
 
 - Adds a **"✈️ Aviator"** button to your Jira issue pages.
-- Scrapes all `https://app.qase.io/plan/PROJECT/ID` links from the page text and links.
-- Fetches the associated Qase test plan names and test case IDs.
-- Grabs any Qase cases linked to the Jira issue via the API.
+- Fetches Qase test plans - presents as a mulit-select dropdown.
+- Fetches linked Qase test cases - presents as a list.
 - Presents a clean popup UI where you can:
   - Select Test Run title and options.
   - Select which test plans and individual cases to include.
-  - Select which TeamCity builds to associate to the test run and queue.
+  - Select which TeamCity builds to queue.
 - Creates a Qase test run with the selected items.
 - Associates the new run with the current Jira issue.
-- Queues TeamCity builds with env.QASE_RUN_ID parameter set.
+- Queues TeamCity builds with env.QASE_RUN_ID parameter set to report results to the newly created run.
 - Reloads the Jira page with success feedback.
 
 ---
@@ -159,15 +158,16 @@ The script reads its configuration from the global `window.aviator` object.
 
 ## 📋 Required Variables Summary
 
-| Section   | Property       | Required | Description |
-|-----------|----------------|----------|-------------|
-| **qase**  | `token`        | ✅       | API token for authenticating with Qase. |
-| **qase**  | `projectCode`  | ✅       | Project code in Qase (e.g., `DEMOS`). |
-| **qase**  | `title`        | ❌       | Custom run title template with token substitution. |
-| **qase**  | `options`        | ❌       | Options to display test run options for environment, milestones, configurations. |
-| **teamcity** | `token`     | ❌       | API token for authenticating with TeamCity (only required if using TeamCity integration). |
-| **teamcity** | `builds`    | ❌       | Array of TeamCity configuration build IDs to trigger. |
-| **teamcity** | `parameters` | ❌      | Optional environment parameters to send with teamcity build trigger |
+| Section   | Property        | Required | Description |
+|-----------|-----------------|----------|-------------|
+| **qase**  | `token`         | ✅       | API token for authenticating with Qase. |
+| **qase**  | `projectCode`   | ✅       | Project code in Qase (e.g., `DEMOS`). |
+| **qase**  | `title`         | ❌       | Custom run title template with token substitution. |
+| **qase**  | `options`       | ❌       | Options to display test run options for environment, milestones, configurations. |
+| **teamcity** | `token`      | ❌       | API token for authenticating with TeamCity (only required if using TeamCity integration). |
+| **teamcity** | `builds`     | ❌       | Array of TeamCity individual buildIds. |
+| **teamcity** | `projects`   | ❌       | Array of TeamCity project Ids to present all child builds. |
+| **teamcity** | `parameters` | ❌       | Optional environment parameters to send with teamcity build trigger |
 
 ---
 
@@ -233,6 +233,7 @@ Configuration for triggering TeamCity builds.
 |----------------|----------|----------|-------------|
 | `token`        | string   | ❌       | API token for authenticating with TeamCity. Required only if using TeamCity integration. |
 | `builds`       | string[] | ❌       | List of TeamCity configuration build IDs to trigger. Example: `["Cypress_SampleProject_TinSingleTestExample"]`. |
+| `projects`     | string[] | ❌       | List of TeamCity configuration project IDs to trigger. Example: `["Cypress_SampleProject_Bronze"]`. |
 | `parameters`   | string[] | ❌       | List of TeamCity parameters to send with the build. |
 
 **Example – Qase + TeamCity**
@@ -248,8 +249,11 @@ window.aviator = {
             'Cypress_SampleProject_TinSingleTestExample',
             'Cypress_SampleProject_AnotherBuild'
         ],
+        projects: [
+            'Cypress_SampleProject_Bronze' //gets list of all subprojects and builds
+        ]
         parameters: [
-            { name: 'my_parameter': value: '12345' }
+            { name: 'my_parameter': value: '12345' } //sends parameter to queue for custom parameters
         ]
     }
 };
@@ -274,5 +278,5 @@ Script needs Qase API token and Project Code to run:
     - Select `Profile` link
     - Select `Access Tokens` link
     - Create access token
-- Replace `YOUR_TEAMCITY_TOKEN ` with your Qase token.
+- Replace `YOUR_TC_TOKEN ` with your Qase token.
 - Add one or more build IDs to the builds array.
