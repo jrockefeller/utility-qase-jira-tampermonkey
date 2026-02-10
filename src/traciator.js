@@ -207,7 +207,7 @@ const Traciator = {
             if (jiraData.length === 0) {
                 AviatorShared.hideLoading();
                 delete window.qaseProgressCallback;
-                AviatorShared.showMessagePopup('No Jira work item keys found on this release page.', AviatorShared.hidePopup);
+                AviatorShared.showMessagePopup('No Jira work item keys found on this release page.', 'warning', AviatorShared.hidePopup);
                 return;
             }
 
@@ -277,7 +277,7 @@ const Traciator = {
             delete window.qaseTrackChunks;
             AviatorShared.hideLoading();
             console.error('Error generating traceability report:', error);
-            AviatorShared.showMessagePopup('Error generating traceability report. Check console for details.', AviatorShared.hidePopup);
+            AviatorShared.showMessagePopup('Error generating traceability report. Check console for details.', 'error', AviatorShared.hidePopup);
         }
     },
 
@@ -294,7 +294,7 @@ const Traciator = {
         const noCoverage = mappingValues.filter(item => item.coverage === 'No Coverage').length;
 
         overlay.innerHTML = `
-            <div class="qasePopup" style="max-width: 90vw; width: 1200px;">
+            <div class="qasePopup" id="qasePopup" style="max-width: 90vw; width: 1200px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <div style="display: flex; align-items: flex-end; gap: 8px;">
                         <h2 style="margin: 0; color: var(--text);">Traciator</h2>
@@ -532,7 +532,7 @@ const Traciator = {
         const qaseIdsList = Array.from(allQaseIds);
 
         if (qaseIdsList.length === 0) {
-            AviatorShared.showMessagePopup('No test cases found in traceability data to create a test run.', AviatorShared.hidePopup);
+            AviatorShared.showMessagePopup('No test cases found in traceability data to create a test run.', 'warning', AviatorShared.hidePopup);
             return;
         }
 
@@ -619,6 +619,7 @@ const Traciator = {
         // Create modal container using centralized utility
         const container = AviatorShared.createModalBox({
             className: 'qasePopup',
+            id: 'qaseTestRunModal',
             customStyles: {
                 maxWidth: '800px',
                 width: '90%',
@@ -864,6 +865,8 @@ const Traciator = {
         // modal box
         const box = document.createElement("div");
         box.classList = 'qasePopup'
+        box.id = 'qasePopup'
+
         Object.assign(box.style, {
             padding: "20px 24px",
             borderRadius: "10px",
@@ -996,14 +999,14 @@ const Traciator = {
                 });
 
                 console.log(`Qase: Test run ${runId} successfully associated with Jira issue ${runData.jiraKey}`);
-                AviatorShared.showMessagePopup(`✅ Test run created and associated successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nJira Issue: ${runData.jiraKey}\nTest Cases: ${runData.caseIds.length}`, null);
+                AviatorShared.showMessagePopup(`Test run created and associated successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nJira Issue: ${runData.jiraKey}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
 
             } catch (associationError) {
                 console.warn('Failed to associate test run with Jira issue:', associationError);
-                AviatorShared.showMessagePopup(`✅ Test run created successfully!\n⚠️ Warning: Could not associate with Jira issue ${runData.jiraKey}\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, null);
+                AviatorShared.showMessagePopup(`Test run created successfully!\n⚠️ Warning: Could not associate with Jira issue ${runData.jiraKey}\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
             }
         } else {
-            AviatorShared.showMessagePopup(`✅ Test run created successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, null);
+            AviatorShared.showMessagePopup(`Test run created successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
         }
     }
 }

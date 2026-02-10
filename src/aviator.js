@@ -68,7 +68,7 @@ const Aviator = {
 
         // Check if we have any selections (individual cases OR test plans)
         if (data.caseIds.length === 0 && data.selectedTestPlanIds.length === 0) {
-            AviatorShared.showMessagePopup('No test cases or test plans selected!');
+            AviatorShared.showMessagePopup('No test cases or test plans selected!', 'warning');
             return;
         }
 
@@ -91,12 +91,12 @@ const Aviator = {
 
         // Final validation after fetching test plan case IDs
         if (allCaseIds.length === 0) {
-            AviatorShared.showMessagePopup('No test cases found in selected plans!');
+            AviatorShared.showMessagePopup('No test cases found in selected plans!', 'warning');
             return;
         }
 
         if (!data.title) {
-            AviatorShared.showMessagePopup('No test run title entered!');
+            AviatorShared.showMessagePopup('No test run title entered!', 'warning');
             return;
         }
 
@@ -147,12 +147,19 @@ const Aviator = {
 
         } catch (err) {
             console.log('Error creating test run:', err);
-            AviatorShared.showMessagePopup('Failed to create Qase test run. See console for details.');
+            AviatorShared.showMessagePopup('Failed to create Qase test run. See console for details.', 'error');
         }
     },
 
     scrapeAndShowAviator: async function () {
         if (!AviatorShared.configuration.checkQaseApiToken() || !AviatorShared.configuration.checkQaseProjectCode()) return;
+
+        /** check qase connection to verify can show the popup */
+        if (await AviatorShared.qase.verifyConnectToQase()) {
+            AviatorShared.hideLoading();
+            AviatorShared.showMessagePopup('Error connecting to Qase. Check your token and project are correct', 'error', AviatorShared.hidePopup)
+            return;
+        }
 
         const projectCode = AviatorShared.configuration.getQaseProjectCode();
 
@@ -176,14 +183,7 @@ const Aviator = {
 
         if (!availableTestPlans.length && !externalCases.length) {
             AviatorShared.hideLoading();
-            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', AviatorShared.hidePopup)
-            return;
-        }
-
-        /** check qase connection to verify can show the popup */
-        if (await AviatorShared.qase.verifyConnectToQase()) {
-            AviatorShared.hideLoading();
-            AviatorShared.showMessagePopup('Error connecting to Qase. Check your token and project are correct', AviatorShared.hidePopup)
+            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', 'warning', AviatorShared.hidePopup)
             return;
         }
 
@@ -211,7 +211,9 @@ const Aviator = {
         });
 
         // Create modal box using centralized utility
-        const box = AviatorShared.createModalBox();
+        const box = AviatorShared.createModalBox({
+            id: 'aviator-changelog',
+        });
 
         box.innerHTML = `
             <h2 style="margin-top:0">🚀 Aviator Changelog 🚀</h2>
@@ -303,7 +305,7 @@ const Aviator = {
         AviatorShared.createdRun = false; // reset for this popup session
 
         if (!plans.length && !externalCases.length) {
-            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', AviatorShared.hidePopup)
+            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', 'warning', AviatorShared.hidePopup)
             return;
         }
 
@@ -474,7 +476,7 @@ const Aviator = {
         AviatorShared.shadowRoot.getElementById('qaseRunBtn').onclick = async () => {
             const data = Aviator.getFormRunData();
             if (!data.caseIds.length && !data.selectedTestPlanIds.length) {
-                AviatorShared.showMessagePopup('No test cases or test plans selected!');
+                AviatorShared.showMessagePopup('No test cases or test plans selected!', 'warning');
                 return;
             }
 
@@ -497,7 +499,7 @@ const Aviator = {
             } catch (err) {
                 console.error('Error creating test run:', err);
                 AviatorShared.hideLoading();
-                AviatorShared.showMessagePopup('Failed to create Test Run. See console for details.');
+                AviatorShared.showMessagePopup('Failed to create Test Run. See console for details.', 'error');
             }
         };
 

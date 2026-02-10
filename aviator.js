@@ -1,6 +1,6 @@
 ﻿// ==================================================
 // Aviator - Combined Build
-// Generated on 2026-02-05 16:19:40
+// Generated on 2026-02-10 08:58:36
 // This file replaces the module loader with combined code
 // ==================================================
 
@@ -576,6 +576,7 @@ const AviatorShared = {
     createModalBox: function (options = {}) {
         const {
             className = 'qasePopup',
+            id = undefined,
             padding = '20px 24px',
             borderRadius = '10px',
             minWidth = '250px',
@@ -587,7 +588,7 @@ const AviatorShared = {
 
         const box = document.createElement('div');
         if (className) box.classList = className;
-        box.is = 'qasePopup'
+        if (id) box.id = id
 
         const baseStyles = {
             padding: padding,
@@ -634,7 +635,7 @@ const AviatorShared = {
             element.addEventListener(eventType, handler, useCapture);
             listeners.push({ element, eventType, handler, useCapture });
         });
-        
+
         // Return cleanup function
         return () => {
             listeners.forEach(({ element, eventType, handler, useCapture }) => {
@@ -650,23 +651,23 @@ const AviatorShared = {
     },
 
     configuration: {
-        getQaseApiToken: () => window.aviator.qase.token ?? null,
+        getQaseApiToken: () => window?.aviator?.qase?.token ?? null,
 
         checkQaseApiToken: function () {
             const token = AviatorShared.configuration.getQaseApiToken();
             if (!token) {
-                AviatorShared.showMessagePopup('⚠️ No Qase API token set.', AviatorShared.hidePopup)
+                AviatorShared.showMessagePopup('No Qase API token set.', 'warning', AviatorShared.hidePopup)
                 return false;
             }
             return true;
         },
 
-        getQaseProjectCode: () => window.aviator.qase.projectCode,
+        getQaseProjectCode: () => window?.aviator?.qase?.projectCode ?? null,
 
         checkQaseProjectCode: function () {
             const code = AviatorShared.configuration.getQaseProjectCode();
             if (!code) {
-                AviatorShared.showMessagePopup('⚠️ No Qase Project Code set.', AviatorShared.hidePopup)
+                AviatorShared.showMessagePopup('No Qase Project Code set.', 'warning', AviatorShared.hidePopup)
                 return false;
             }
             return true;
@@ -703,7 +704,7 @@ const AviatorShared = {
 
     shouldClosePopup: () => AviatorShared.shadowRoot?.getElementById('keep-open')?.checked !== true,
 
-    showMessagePopup: function (message, onClose) {
+    showMessagePopup: function (message, type, onClose) {
 
         AviatorShared.createShadowRootOverlay()
 
@@ -743,26 +744,24 @@ const AviatorShared = {
 
 
         // Determine title and button text based on message content
-        const isSuccess = message.includes('✅') || message.includes('successfully');
-        const isWarning = message.includes('⚠️') || message.includes('Warning');
+        const isSuccess = type.toLowerCase() == 'success'
+        const isWarning = type.toLowerCase() == 'warning'
 
         let title, buttonText;
         if (isSuccess) {
-            title = '✅ Success';
+            title = 'Success';
             buttonText = 'Great!';
         } else if (isWarning) {
-            title = '⚠️ Warning';
+            title = 'Warning';
             buttonText = 'Got it';
         } else {
-            title = '🔒 Oops';
+            title = 'Oops';
             buttonText = 'Got it';
         }
 
         box.innerHTML = `
             <h2 style="margin-top:0">${title}</h2>
-            <div style="font-size:14px; line-height:1.5; text-align: center;">
-                ${message}
-            </div>
+            <div style="font-size:14px; line-height:1.5; text-align: center;">${message}</div>
             <button id="popup-ok" class="btn primary" style="margin-top: 10px">${buttonText}</button>
             `;
 
@@ -776,16 +775,16 @@ const AviatorShared = {
             '#popup-ok': {
                 'click': () => {
                     overlay.remove();
-                    
+
                     // Also remove from shadow root if still there
                     if (AviatorShared.shadowRoot && AviatorShared.shadowRoot.contains(overlay)) {
                         AviatorShared.shadowRoot.removeChild(overlay);
                     }
-            
+
                     // Check if shadow root only contains styles (indicating no other modals are open)
                     const shadowRootChildren = AviatorShared.shadowRoot ? Array.from(AviatorShared.shadowRoot.children) : [];
                     const onlyStylesRemain = shadowRootChildren.length === 1 && shadowRootChildren[0].tagName === 'STYLE';
-                    
+
                     // If only styles remain, remove the main overlay container
                     if (onlyStylesRemain) {
                         const mainOverlay = document.getElementById('qasePopupOverlay');
@@ -933,9 +932,9 @@ const AviatorShared = {
 
             // Use centralized multi-event listener utility
             AviatorShared.jiraShortcutBlocker = AviatorShared.addMultiEventListener(
-                document, 
-                ['keydown', 'keypress', 'keyup'], 
-                handler, 
+                document,
+                ['keydown', 'keypress', 'keyup'],
+                handler,
                 true // use capture phase
             );
         },
@@ -943,6 +942,7 @@ const AviatorShared = {
         unblockJiraShortcuts: function () {
             if (AviatorShared.jiraShortcutBlocker) {
                 AviatorShared.jiraShortcutBlocker();
+                AviatorShared.jiraShortcutBlocker = null;
             }
         },
 
@@ -1402,7 +1402,7 @@ const AviatorShared = {
 
             let { issueKey } = AviatorShared.configuration.getJiraIssueDetails()
             if (!issueKey) {
-                AviatorShared.showMessagePopup('Could not detect Jira issue ID in URL for association.');
+                AviatorShared.showMessagePopup('Could not detect Jira issue ID in URL for association.', 'error');
                 return;
             }
 
@@ -1658,10 +1658,10 @@ const AviatorShared = {
 
     getTeamCityParametersFromModal: function () {
         const parameters = [];
-        
+
         // Check if we're in shadow DOM context
         const context = AviatorShared.shadowRoot || document;
-        
+
         if (window.aviator?.teamcity?.parameters) {
             window.aviator.teamcity.parameters.forEach((param, index) => {
                 const input = context.querySelector(`#teamcity-param-${index}`);
@@ -1673,7 +1673,7 @@ const AviatorShared = {
                 }
             });
         }
-        
+
         return parameters;
     },
 
@@ -1710,7 +1710,7 @@ const AviatorShared = {
             btn.classList = jiraCreateButton.classList
 
             btn.style.marginLeft = '5px'
-            btn.style.background = isDarkMode ? '#F6A58B' : '#A6F091';
+            btn.style.background = isDarkMode ? '#F6A58B' : '#27AE1E';
             btn.onmouseenter = () => btn.style.background = isDarkMode ? '#FFCA82' : '#C1F4BE';
             btn.onmouseleave = () => btn.style.background = isDarkMode ? '#F6A58B' : '#27AE1E';
 
@@ -2191,12 +2191,12 @@ const AviatorShared = {
             }
 
             let html = `<h3>🚀 TeamCity Builds<label style="float: right; font-size: small; font-weight:300">run selected qases only<input type="checkbox" id="teamcity-qases-only" checked></label></h3>`
-            
+
             // Add TeamCity parameters section if configured
             if (window.aviator?.teamcity?.parameters && window.aviator.teamcity.parameters.length > 0) {
                 html += '<div id="teamcity-parameters" style="margin-bottom: 15px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card);">';
                 html += '<h4 style="margin: 0 0 8px 0; font-size: 0.9rem; color: var(--text); display: inline;">Build Parameters</h4><small style="color: var(--text-muted); font-size: 0.8rem;"> will be sent to all triggered TeamCity builds</small>';
-                
+
                 window.aviator.teamcity.parameters.forEach((param, index) => {
                     html += `
                         <div style="margin-top: 8px;">
@@ -2210,7 +2210,7 @@ const AviatorShared = {
                         </div>
                     `;
                 });
-                
+
                 html += '</div>';
             }
 
@@ -2393,7 +2393,7 @@ const Aviator = {
 
         // Check if we have any selections (individual cases OR test plans)
         if (data.caseIds.length === 0 && data.selectedTestPlanIds.length === 0) {
-            AviatorShared.showMessagePopup('No test cases or test plans selected!');
+            AviatorShared.showMessagePopup('No test cases or test plans selected!', 'warning');
             return;
         }
 
@@ -2416,12 +2416,12 @@ const Aviator = {
 
         // Final validation after fetching test plan case IDs
         if (allCaseIds.length === 0) {
-            AviatorShared.showMessagePopup('No test cases found in selected plans!');
+            AviatorShared.showMessagePopup('No test cases found in selected plans!', 'warning');
             return;
         }
 
         if (!data.title) {
-            AviatorShared.showMessagePopup('No test run title entered!');
+            AviatorShared.showMessagePopup('No test run title entered!', 'warning');
             return;
         }
 
@@ -2472,12 +2472,19 @@ const Aviator = {
 
         } catch (err) {
             console.log('Error creating test run:', err);
-            AviatorShared.showMessagePopup('Failed to create Qase test run. See console for details.');
+            AviatorShared.showMessagePopup('Failed to create Qase test run. See console for details.', 'error');
         }
     },
 
     scrapeAndShowAviator: async function () {
         if (!AviatorShared.configuration.checkQaseApiToken() || !AviatorShared.configuration.checkQaseProjectCode()) return;
+
+        /** check qase connection to verify can show the popup */
+        if (await AviatorShared.qase.verifyConnectToQase()) {
+            AviatorShared.hideLoading();
+            AviatorShared.showMessagePopup('Error connecting to Qase. Check your token and project are correct', 'error', AviatorShared.hidePopup)
+            return;
+        }
 
         const projectCode = AviatorShared.configuration.getQaseProjectCode();
 
@@ -2501,14 +2508,7 @@ const Aviator = {
 
         if (!availableTestPlans.length && !externalCases.length) {
             AviatorShared.hideLoading();
-            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', AviatorShared.hidePopup)
-            return;
-        }
-
-        /** check qase connection to verify can show the popup */
-        if (await AviatorShared.qase.verifyConnectToQase()) {
-            AviatorShared.hideLoading();
-            AviatorShared.showMessagePopup('Error connecting to Qase. Check your token and project are correct', AviatorShared.hidePopup)
+            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', 'warning', AviatorShared.hidePopup)
             return;
         }
 
@@ -2536,7 +2536,9 @@ const Aviator = {
         });
 
         // Create modal box using centralized utility
-        const box = AviatorShared.createModalBox();
+        const box = AviatorShared.createModalBox({
+            id: 'aviator-changelog',
+        });
 
         box.innerHTML = `
             <h2 style="margin-top:0">🚀 Aviator Changelog 🚀</h2>
@@ -2628,7 +2630,7 @@ const Aviator = {
         AviatorShared.createdRun = false; // reset for this popup session
 
         if (!plans.length && !externalCases.length) {
-            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', AviatorShared.hidePopup)
+            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', 'warning', AviatorShared.hidePopup)
             return;
         }
 
@@ -2799,7 +2801,7 @@ const Aviator = {
         AviatorShared.shadowRoot.getElementById('qaseRunBtn').onclick = async () => {
             const data = Aviator.getFormRunData();
             if (!data.caseIds.length && !data.selectedTestPlanIds.length) {
-                AviatorShared.showMessagePopup('No test cases or test plans selected!');
+                AviatorShared.showMessagePopup('No test cases or test plans selected!', 'warning');
                 return;
             }
 
@@ -2822,7 +2824,7 @@ const Aviator = {
             } catch (err) {
                 console.error('Error creating test run:', err);
                 AviatorShared.hideLoading();
-                AviatorShared.showMessagePopup('Failed to create Test Run. See console for details.');
+                AviatorShared.showMessagePopup('Failed to create Test Run. See console for details.', 'error');
             }
         };
 
@@ -3060,7 +3062,7 @@ const Traciator = {
             if (jiraData.length === 0) {
                 AviatorShared.hideLoading();
                 delete window.qaseProgressCallback;
-                AviatorShared.showMessagePopup('No Jira work item keys found on this release page.', AviatorShared.hidePopup);
+                AviatorShared.showMessagePopup('No Jira work item keys found on this release page.', 'warning', AviatorShared.hidePopup);
                 return;
             }
 
@@ -3130,7 +3132,7 @@ const Traciator = {
             delete window.qaseTrackChunks;
             AviatorShared.hideLoading();
             console.error('Error generating traceability report:', error);
-            AviatorShared.showMessagePopup('Error generating traceability report. Check console for details.', AviatorShared.hidePopup);
+            AviatorShared.showMessagePopup('Error generating traceability report. Check console for details.', 'error', AviatorShared.hidePopup);
         }
     },
 
@@ -3147,7 +3149,7 @@ const Traciator = {
         const noCoverage = mappingValues.filter(item => item.coverage === 'No Coverage').length;
 
         overlay.innerHTML = `
-            <div class="qasePopup" style="max-width: 90vw; width: 1200px;">
+            <div class="qasePopup" id="qasePopup" style="max-width: 90vw; width: 1200px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <div style="display: flex; align-items: flex-end; gap: 8px;">
                         <h2 style="margin: 0; color: var(--text);">Traciator</h2>
@@ -3385,7 +3387,7 @@ const Traciator = {
         const qaseIdsList = Array.from(allQaseIds);
 
         if (qaseIdsList.length === 0) {
-            AviatorShared.showMessagePopup('No test cases found in traceability data to create a test run.', AviatorShared.hidePopup);
+            AviatorShared.showMessagePopup('No test cases found in traceability data to create a test run.', 'warning', AviatorShared.hidePopup);
             return;
         }
 
@@ -3472,6 +3474,7 @@ const Traciator = {
         // Create modal container using centralized utility
         const container = AviatorShared.createModalBox({
             className: 'qasePopup',
+            id: 'qaseTestRunModal',
             customStyles: {
                 maxWidth: '800px',
                 width: '90%',
@@ -3717,6 +3720,8 @@ const Traciator = {
         // modal box
         const box = document.createElement("div");
         box.classList = 'qasePopup'
+        box.id = 'qasePopup'
+
         Object.assign(box.style, {
             padding: "20px 24px",
             borderRadius: "10px",
@@ -3849,14 +3854,14 @@ const Traciator = {
                 });
 
                 console.log(`Qase: Test run ${runId} successfully associated with Jira issue ${runData.jiraKey}`);
-                AviatorShared.showMessagePopup(`✅ Test run created and associated successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nJira Issue: ${runData.jiraKey}\nTest Cases: ${runData.caseIds.length}`, null);
+                AviatorShared.showMessagePopup(`Test run created and associated successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nJira Issue: ${runData.jiraKey}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
 
             } catch (associationError) {
                 console.warn('Failed to associate test run with Jira issue:', associationError);
-                AviatorShared.showMessagePopup(`✅ Test run created successfully!\n⚠️ Warning: Could not associate with Jira issue ${runData.jiraKey}\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, null);
+                AviatorShared.showMessagePopup(`Test run created successfully!\n⚠️ Warning: Could not associate with Jira issue ${runData.jiraKey}\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
             }
         } else {
-            AviatorShared.showMessagePopup(`✅ Test run created successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, null);
+            AviatorShared.showMessagePopup(`Test run created successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
         }
     }
 }
