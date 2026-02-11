@@ -1,6 +1,6 @@
 ﻿// ==================================================
 // Aviator - Combined Build
-// Generated on 2026-02-10 08:58:36
+// Generated on 2026-02-10 11:14:17
 // This file replaces the module loader with combined code
 // ==================================================
 
@@ -3327,11 +3327,6 @@ const Traciator = {
             }
         });
 
-        // Close on overlay background click
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeModal();
-        });
-
         // Show Traciator changelog once per version
         if (Traciator.shouldShowTraciatorFeaturePopup()) {
             // Delay slightly to ensure modal is fully rendered
@@ -3680,10 +3675,6 @@ const Traciator = {
             }
                 }
             }
-        });
-
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeModal();
         });
     },
 

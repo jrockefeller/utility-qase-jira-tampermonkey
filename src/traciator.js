@@ -303,20 +303,20 @@ const Traciator = {
                     <button id="closeTraceabilityModal" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text);">&times;</button>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                <div id="header-tiles" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--text);">${totalJiraKeys}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Jira Keys Found</div>
                     </div>
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--text);">${totalTestCases}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Test Cases</div>
                     </div>
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--text);">${totalTestRuns}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Test Runs</div>
                     </div>
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: #4caf50;">${fullCoverage}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Full Coverage</div>
                     </div>
@@ -470,11 +470,6 @@ const Traciator = {
                     Traciator.createTestRunFromTraceability(traceabilityMapping);
                 }
             }
-        });
-
-        // Close on overlay background click
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeModal();
         });
 
         // Show Traciator changelog once per version
@@ -825,10 +820,6 @@ const Traciator = {
             }
                 }
             }
-        });
-
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeModal();
         });
     },
 
