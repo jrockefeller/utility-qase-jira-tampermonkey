@@ -2,7 +2,118 @@
 // Traciator Workflow v1.0.0
 
 const Traciator = {
-    version: '1.0.0',
+    version: '1.1.0',
+
+    shouldShowTraciatorFeaturePopup: function () {
+        const seenVersion = localStorage.getItem("traciatorLastFeaturePopup") || "";
+        if (seenVersion !== Traciator.version) {
+            localStorage.setItem("traciatorLastFeaturePopup", Traciator.version);
+            return true;
+        }
+        return false;
+    },
+
+    showTraciatorFeaturePopup: function () {
+        // Ensure shadow root exists
+        if (!AviatorShared.shadowRoot) {
+            AviatorShared.createShadowRootOverlay();
+        }
+
+        // overlay
+        const overlay = document.createElement("div");
+        Object.assign(overlay.style, {
+            position: "fixed",
+            top: "0",
+            left: "0",
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.65)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: "999999" // sits above everything including main modal
+        });
+
+        // modal box
+        const box = document.createElement("div");
+        box.classList = 'qasePopup'
+        box.id = 'qasePopup'
+
+        Object.assign(box.style, {
+            padding: "20px 24px",
+            borderRadius: "10px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+            /* size behavior */
+            minWidth: "250px",   // won't shrink below this
+            maxWidth: "600px",   // won't grow beyond this
+            width: "auto",       // lets it size based on content
+            boxSizing: "border-box",
+            /* layout */
+            display: "flex",
+            flexDirection: "column",   // stack title, text, button
+            justifyContent: "center",
+            alignItems: "center",
+        });
+
+        box.innerHTML = `
+            <h2 style="margin-top:0">🔍 Traciator Changelog 🔍</h2>
+            <div class="changelog-container">
+
+                <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.1.0</div>
+                    <div class="changelog-description">Performance and Feedback:</div>
+                    <ul class="changelog-feature-list">
+                        <li>Consolidate status message popup presentation.</li>
+                        <li>Selected Teamcity builds provide status information feedback.</li>
+                        <li>Robust Teamcity api error messaging.</li>
+                        <li>Unified Run Title validation experience.</li>
+                        <li>Performant GET qase/runs by 40%</li>
+                    </ul>  
+                     <div class="changelog-description">Bugs:</div>
+                    <ul class="changelog-feature-list">
+                        <li>Test run modal shows total cases from all sources.</li>
+                        <li>Selected test plans included in created test run.</li>
+                    </ul>                   
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">v1.0.0</div>
+                    <div class="changelog-description">Initial Traciator release! Generate comprehensive traceability reports from release pages.</div>
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">Core Features</div>
+                    <ul class="changelog-feature-list">
+                        <li>Visual test coverage mapping between Jira issues, test cases, and test runs</li>
+                        <li>Export detailed CSV reports for stakeholder analysis</li>
+                        <li>Create test runs directly from traceability data</li>
+                        <li>Real-time test run statistics and coverage indicators</li>
+                        <li>Smart filtering by specific Jira keys from release pages</li>
+                        <li>Distinct test case counting across multiple data sources</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">How to use</div>
+                    <div class="changelog-text">Navigate to any Jira release page and click the 🔍 Traciator button to generate your traceability report!</div>
+                </div>
+            </div>
+              <button id="traciator-feature-ok" class="btn primary" style="margin-top: 10px">Got it</button>
+            `;
+
+        overlay.appendChild(box);
+        AviatorShared.shadowRoot.appendChild(overlay);
+
+        // Set up close button using centralized utility
+        AviatorShared.addEventListeners(overlay, {
+            '#traciator-feature-ok': {
+                'click': () => {
+                    overlay.remove();
+                }
+            }
+        });
+    },
+
 
     extractVersionNameFromReleasePage: function () {
         // First try to extract from URL pattern
@@ -122,9 +233,68 @@ const Traciator = {
     buildTraceabilityMapping: function (testCases, testRuns, jiraData) {
         const mapping = {};
 
+        const normalizeJiraKey = (key) => {
+            if (!key) return null;
+            const str = String(key).trim();
+            if (!str) return null;
+            return str.toUpperCase();
+        };
+
+        const extractJiraKeyFromAny = (obj) => {
+            if (!obj || typeof obj !== 'object') return null;
+
+            const candidates = [
+                obj.id,
+                obj.key,
+                obj.external_id,
+                obj.externalId,
+                obj.name,
+                obj.title
+            ];
+
+            for (const candidate of candidates) {
+                const normalized = normalizeJiraKey(candidate);
+                if (normalized) return normalized;
+            }
+
+            const urlCandidates = [obj.url, obj.link, obj.self, obj.browseUrl];
+            for (const url of urlCandidates) {
+                if (typeof url !== 'string') continue;
+                const match = url.match(/\b([A-Z][A-Z0-9]+-\d+)\b/i);
+                if (match) return normalizeJiraKey(match[1]);
+            }
+
+            return null;
+        };
+
+        const getCaseIdsFromRun = (testRun) => {
+            if (!testRun || typeof testRun !== 'object') return [];
+
+            if (Array.isArray(testRun.cases)) {
+                if (testRun.cases.length === 0) return [];
+
+                // Qase may return either [123, 456] or [{case_id:123}, ...]
+                if (typeof testRun.cases[0] === 'object' && testRun.cases[0] !== null) {
+                    return testRun.cases
+                        .map(c => c.case_id || c.id)
+                        .filter(Boolean);
+                }
+
+                return testRun.cases.filter(Boolean);
+            }
+
+            if (Array.isArray(testRun.case_ids)) {
+                return testRun.case_ids.filter(Boolean);
+            }
+
+            return [];
+        };
+
         // Initialize mapping for all Jira keys
         jiraData.forEach(item => {
-            mapping[item.key] = {
+            const normalizedKey = normalizeJiraKey(item.key);
+            if (!normalizedKey) return;
+            mapping[normalizedKey] = {
                 jiraKey: item.key,
                 jiraName: item.name,
                 testCases: [],
@@ -139,8 +309,9 @@ const Traciator = {
                 testCase.external_issues.forEach(extIssue => {
                     if (extIssue.type === 'jira-cloud' && extIssue.issues) {
                         extIssue.issues.forEach(issue => {
-                            if (mapping[issue.id]) {
-                                mapping[issue.id].testCases.push(testCase);
+                            const jiraKey = extractJiraKeyFromAny(issue);
+                            if (jiraKey && mapping[jiraKey]) {
+                                mapping[jiraKey].testCases.push(testCase);
                             }
                         });
                     }
@@ -150,26 +321,24 @@ const Traciator = {
 
         // Map test runs to Jira keys
         testRuns.forEach(testRun => {
-            if (testRun.external_issue && testRun.external_issue.id) {
-                const jiraKey = testRun.external_issue.id;
-                if (mapping[jiraKey]) {
-                    // Count total cases in run vs cases linked to this Jira key
-                    const totalCasesInRun = testRun.cases ? testRun.cases.length : (testRun.stats ? testRun.stats.total : 0);
-                    const linkedCasesInRun = testRun.cases ?
-                        testRun.cases.filter(caseId =>
-                            mapping[jiraKey].testCases.some(tc => tc.id === caseId)
-                        ).length : 0;
+            const jiraKey = extractJiraKeyFromAny(testRun.external_issue);
+            if (!jiraKey || !mapping[jiraKey]) return;
 
-                    // Add additional properties to the test run for display
-                    const enhancedRun = {
-                        ...testRun,
-                        totalCasesInRun,
-                        linkedCasesInRun
-                    };
+            // Count total cases in run vs cases linked to this Jira key
+            const runCaseIds = getCaseIdsFromRun(testRun);
+            const totalCasesInRun = runCaseIds.length || (testRun.stats ? testRun.stats.total : 0);
 
-                    mapping[jiraKey].testRuns.push(enhancedRun);
-                }
-            }
+            const linkedTestCaseIds = new Set(mapping[jiraKey].testCases.map(tc => tc.id).filter(Boolean));
+            const linkedCasesInRun = runCaseIds.reduce((acc, id) => (linkedTestCaseIds.has(id) ? acc + 1 : acc), 0);
+
+            // Add additional properties to the test run for display
+            const enhancedRun = {
+                ...testRun,
+                totalCasesInRun,
+                linkedCasesInRun
+            };
+
+            mapping[jiraKey].testRuns.push(enhancedRun);
         });
 
         // Update coverage status
@@ -207,7 +376,10 @@ const Traciator = {
             if (jiraData.length === 0) {
                 AviatorShared.hideLoading();
                 delete window.qaseProgressCallback;
-                AviatorShared.showMessagePopup('No Jira work item keys found on this release page.', 'warning', AviatorShared.hidePopup);
+                AviatorShared.showStatusModal([], {
+                    notification: { message: 'No Jira work item keys found on this release page.', type: 'warning' },
+                    onClose: AviatorShared.hidePopup
+                });
                 return;
             }
 
@@ -216,13 +388,14 @@ const Traciator = {
             const jiraKeys = jiraData.map(item => item.key);
             const testCases = await AviatorShared.qase.fetchTestCasesForJiraKeys(projectCode, jiraKeys);
 
-            // Step 3: Fetch test runs from the last 2 months
+            // Step 3: Fetch test runs from the last 30 days
             AviatorShared.showLoading(`Found ${testCases.length} test cases. Preparing to fetch test runs...`, { current: 3, total: 4 });
 
             // Enable chunk progress tracking
             window.qaseTrackChunks = true;
 
-            const testRuns = await AviatorShared.qase.fetchTestRunsWithPagination(projectCode, null, jiraKeys);
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            const testRuns = await AviatorShared.qase.fetchTestRunsWithPagination(projectCode, thirtyDaysAgo, jiraKeys);
 
             // Disable chunk tracking
             window.qaseTrackChunks = false;
@@ -263,6 +436,7 @@ const Traciator = {
             });
 
             const totalDistinctTestCases = allDistinctTestCaseIds.size;
+            const allDistinctTestCaseIdsArray = Array.from(allDistinctTestCaseIds);
 
             // Clean up progress tracking
             delete window.qaseProgressCallback;
@@ -270,18 +444,21 @@ const Traciator = {
             AviatorShared.hideLoading();
 
             // Step 6: Show traceability report with correct distinct test case count
-            Traciator.showTraceabilityReportModal(traceabilityMapping, jiraData.length, totalDistinctTestCases, testRuns.length);
+            Traciator.showTraceabilityReportModal(traceabilityMapping, jiraData.length, totalDistinctTestCases, testRuns.length, allDistinctTestCaseIdsArray);
 
         } catch (error) {
             delete window.qaseProgressCallback;
             delete window.qaseTrackChunks;
             AviatorShared.hideLoading();
             console.error('Error generating traceability report:', error);
-            AviatorShared.showMessagePopup('Error generating traceability report. Check console for details.', 'error', AviatorShared.hidePopup);
+            AviatorShared.showStatusModal([], {
+                notification: { message: 'Error generating traceability report. Check console for details.', type: 'error' },
+                onClose: AviatorShared.hidePopup
+            });
         }
     },
 
-    showTraceabilityReportModal: function (traceabilityMapping, totalJiraKeys, totalTestCases, totalTestRuns) {
+    showTraceabilityReportModal: function (traceabilityMapping, totalJiraKeys, totalTestCases, totalTestRuns, allDistinctTestCaseIds = []) {
         AviatorShared.jira.blockJiraShortcuts();
 
         const overlay = document.createElement('div');
@@ -303,26 +480,26 @@ const Traciator = {
                     <button id="closeTraceabilityModal" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text);">&times;</button>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                <div id="header-tiles" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--text);">${totalJiraKeys}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Jira Keys Found</div>
                     </div>
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--text);">${totalTestCases}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Test Cases</div>
                     </div>
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--text);">${totalTestRuns}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Test Runs</div>
                     </div>
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: #4caf50;">${fullCoverage}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Full Coverage</div>
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                <div id="coverage-tiles" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
                     <div style="background: #4caf50; color: white; padding: 8px; border-radius: 4px; text-align: center; font-size: 12px;">
                         Full Coverage: ${fullCoverage}
                     </div>
@@ -399,7 +576,7 @@ const Traciator = {
                     const displayTitle = title.length > maxLength ? title.substring(0, maxLength - 3) + '...' : title;
 
                     return `<div style="font-size: 11px; margin: 2px 0; line-height: 1.3;">
-                                            <div style="font-weight: 500; color: var(--text);">${displayTitle} <span style="color: var(--text-muted); font-size: 10px;">${resultSummary}</span></div>
+                                            <div id="testRun-${run.id}" style="font-weight: 500; color: var(--text);">${displayTitle} <span style="color: var(--text-muted); font-size: 10px;">${resultSummary}</span></div>
                                         </div>`;
                 })
                 .join('');
@@ -457,6 +634,7 @@ const Traciator = {
         };
 
         // Set up event listeners using centralized utility
+        let createTestRunFromTraceabilityInFlight = false;
         AviatorShared.addEventListeners(overlay, {
             '#closeTraceabilityModal': { 'click': closeModal },
             '#closeTraceabilityModal2': { 'click': closeModal },
@@ -466,15 +644,21 @@ const Traciator = {
                 }
             },
             '#createTestRunFromTraceability': {
-                'click': () => {
-                    Traciator.createTestRunFromTraceability(traceabilityMapping);
+                'click': async () => {
+                    if (createTestRunFromTraceabilityInFlight) return;
+                    createTestRunFromTraceabilityInFlight = true;
+
+                    const btn = overlay.querySelector('#createTestRunFromTraceability');
+                    if (btn) btn.disabled = true;
+
+                    try {
+                        await Traciator.createTestRunFromTraceability(traceabilityMapping, allDistinctTestCaseIds);
+                    } finally {
+                        createTestRunFromTraceabilityInFlight = false;
+                        if (btn) btn.disabled = false;
+                    }
                 }
             }
-        });
-
-        // Close on overlay background click
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeModal();
         });
 
         // Show Traciator changelog once per version
@@ -520,19 +704,29 @@ const Traciator = {
         link.click();
     },
 
-    createTestRunFromTraceability: async function (traceabilityMapping) {
-        // Collect all unique Qase test case IDs from the traceability mapping
-        const allQaseIds = new Set();
-        Object.values(traceabilityMapping).forEach(item => {
-            item.testCases.forEach(testCase => {
-                allQaseIds.add(testCase.id);
-            });
-        });
+    createTestRunFromTraceability: async function (traceabilityMapping, allDistinctTestCaseIds = []) {
+        // Use the complete set of distinct test case IDs from the traceability report
+        let qaseIdsList;
 
-        const qaseIdsList = Array.from(allQaseIds);
+        if (allDistinctTestCaseIds && allDistinctTestCaseIds.length > 0) {
+            // Use the full set of distinct test case IDs (includes cases from both test cases and test runs)
+            qaseIdsList = allDistinctTestCaseIds;
+        } else {
+            // Fallback: collect test case IDs only from traceability mapping
+            const allQaseIds = new Set();
+            Object.values(traceabilityMapping).forEach(item => {
+                item.testCases.forEach(testCase => {
+                    allQaseIds.add(testCase.id);
+                });
+            });
+            qaseIdsList = Array.from(allQaseIds);
+        }
 
         if (qaseIdsList.length === 0) {
-            AviatorShared.showMessagePopup('No test cases found in traceability data to create a test run.', 'warning', AviatorShared.hidePopup);
+            AviatorShared.showStatusModal([], {
+                notification: { message: 'No test cases found in traceability data to create a test run.', type: 'warning' },
+                onClose: AviatorShared.hidePopup
+            });
             return;
         }
 
@@ -572,13 +766,13 @@ const Traciator = {
             try {
                 AviatorShared.showLoading('Fetching TeamCity builds...');
                 tcBuildDetails = await AviatorShared.teamcity.fetchAllTeamCityBuilds();
-                
+
                 // Count total builds to determine layout
                 if (tcBuildDetails && (tcBuildDetails.flatBuilds?.length > 0 || tcBuildDetails.projectStructure?.length > 0)) {
                     // Count only valid individual builds (exclude error builds)
                     const validIndividualBuilds = tcBuildDetails.flatBuilds?.filter(build => !build.isError) || [];
                     teamCityBuildsCount = validIndividualBuilds.length;
-                    
+
                     // Count builds in project structure recursively
                     if (tcBuildDetails.projectStructure && Array.isArray(tcBuildDetails.projectStructure)) {
                         function countBuildsInProjects(projects) {
@@ -598,7 +792,7 @@ const Traciator = {
                         const projectBuildCount = countBuildsInProjects(tcBuildDetails.projectStructure);
                         teamCityBuildsCount += projectBuildCount;
                     }
-                    
+
                 }
             } catch (error) {
                 console.warn('Failed to fetch TeamCity build details:', error);
@@ -641,9 +835,10 @@ const Traciator = {
 
         // Test cases summary section (full width)
         const summarySection = document.createElement('div');
-        summarySection.style.marginBottom = '20px';
+        summarySection.style.marginBottom = '15px';
+        summarySection.style.marginTop = '15px';
         summarySection.innerHTML = `
-            <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
+            <div id="create-run-summary" style="background: var(--bg-card); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
                 <p style="margin: 0; color: var(--text);">This test run will include <strong>${qaseIdsList.length} test cases</strong> identified from the traceability report.</p>
             </div>
         `;
@@ -734,6 +929,11 @@ const Traciator = {
             runTitleInput.value = `${versionName} Release Verification`;
         }
 
+        const { validate: validateRunTitle } = AviatorShared.validation.setupRunTitleValidation({
+            root: container,
+            minLength: 5
+        });
+
         // Event listeners
         const closeModal = () => {
             AviatorShared.hideLoading(); // Hide any loading screens that might be showing
@@ -746,267 +946,200 @@ const Traciator = {
             '#cancelTraceabilityTestRun': { 'click': closeModal },
             '#createTraceabilityTestRun': {
                 'click': async () => {
-                    const title = container.querySelector('#qaseRunTitle').value.trim();
-                    if (!title) {
-                        alert('Please enter a test run title');
+                    const createBtn = container.querySelector('#createTraceabilityTestRun');
+                    if (createBtn?.disabled) return;
+                    if (createBtn) createBtn.disabled = true;
+                    const title = runTitleInput ? runTitleInput.value.trim() : '';
+                    if (!validateRunTitle()) {
+                        if (runTitleInput) runTitleInput.focus();
+                        if (createBtn) createBtn.disabled = false;
                         return;
                     }
 
-            const jiraKeySelect = container.querySelector('#qaseJiraKey');
-            const selectedJiraKey = jiraKeySelect ? jiraKeySelect.value : null;
+                    const jiraKeySelect = container.querySelector('#qaseJiraKey');
+                    const selectedJiraKey = jiraKeySelect ? jiraKeySelect.value : null;
 
-            const environment = container.querySelector('#qaseEnv');
-            const milestone = container.querySelector('#qaseMilestone');
+                    const environment = container.querySelector('#qaseEnv');
+                    const milestone = container.querySelector('#qaseMilestone');
 
-            // Get selected test plans from the multi-select dropdown
-            const selectedTestPlanCheckboxes = container.querySelectorAll('#testPlanOptions input[type="checkbox"]:checked');
-            const selectedTestPlans = Array.from(selectedTestPlanCheckboxes)
-                .map(cb => parseInt(cb.value))
-                .filter(planId => !isNaN(planId) && planId > 0);
+                    // Get selected test plans from the multi-select dropdown
+                    const selectedTestPlanCheckboxes = container.querySelectorAll('#traciatorTestPlanOptions input[type="checkbox"]:checked');
+                    const selectedTestPlans = Array.from(selectedTestPlanCheckboxes)
+                        .map(cb => parseInt(cb.value))
+                        .filter(planId => !isNaN(planId) && planId > 0);
 
-            // Get test cases from selected test plans
-            let testPlanCaseIds = [];
-            if (selectedTestPlans.length > 0) {
-                try {
-                    AviatorShared.showLoading('Fetching test cases from selected test plans...');
-                    const planDetails = await Promise.all(
-                        selectedTestPlans.map(planId => AviatorShared.qase.fetchQaseTestPlanDetails(projectCode, planId))
-                    );
-                    testPlanCaseIds = planDetails.flatMap(plan => plan.caseIds).filter(id => id != null && !isNaN(id) && id > 0);
-                    testPlanCaseIds = [...new Set(testPlanCaseIds)]; // Remove duplicates
-                } catch (error) {
-                    console.warn('Error fetching test cases from selected test plans:', error);
-                    alert('Warning: Could not fetch test cases from some selected test plans.');
-                }
-            }
+                    // Get test cases from selected test plans
+                    let testPlanCaseIds = [];
+                    if (selectedTestPlans.length > 0) {
+                        try {
+                            AviatorShared.showLoading('Fetching test cases from selected test plans...');
+                            const planDetails = await Promise.all(
+                                selectedTestPlans.map(planId => AviatorShared.qase.fetchQaseTestPlanDetails(projectCode, planId))
+                            );
+                            testPlanCaseIds = planDetails.flatMap(plan => plan.caseIds).filter(id => id != null && !isNaN(id) && id > 0);
+                            testPlanCaseIds = [...new Set(testPlanCaseIds)]; // Remove duplicates
+                        } catch (error) {
+                            console.warn('Error fetching test cases from selected test plans:', error);
+                            alert('Warning: Could not fetch test cases from some selected test plans.');
+                        }
+                    }
 
-            // Combine traceability case IDs with test plan case IDs
-            const allCaseIds = [...new Set([...qaseIdsList, ...testPlanCaseIds])];
+                    // Combine traceability case IDs with test plan case IDs
+                    const allCaseIds = [...new Set([...qaseIdsList, ...testPlanCaseIds])];
 
-            const runData = {
-                title: title,
-                caseIds: allCaseIds,
-                jiraKey: selectedJiraKey,
-                environment: {
-                    id: environment?.value || null,
-                    text: environment?.options?.[environment.selectedIndex]?.text || null
-                },
-                milestone: {
-                    id: milestone?.value || null,
-                    text: milestone?.options?.[milestone.selectedIndex]?.text || null
-                },
-                configurations: {},
-                tcBuilds: [],
-                selectedTestPlans: selectedTestPlans // Add selected test plans for tracking
-            };
+                    const runData = {
+                        title: title,
+                        caseIds: allCaseIds,
+                        jiraKey: selectedJiraKey,
+                        environment: {
+                            id: environment?.value || null,
+                            text: environment?.options?.[environment.selectedIndex]?.text || null
+                        },
+                        milestone: {
+                            id: milestone?.value || null,
+                            text: milestone?.options?.[milestone.selectedIndex]?.text || null
+                        },
+                        configurations: {},
+                        tcBuilds: [],
+                        selectedTestPlans: selectedTestPlans // Add selected test plans for tracking
+                    };
 
-            // Get configuration selections
-            const configSelects = container.querySelectorAll('.qaseConfig');
-            configSelects.forEach(select => {
-                if (select.value) {
-                    runData.configurations[select.getAttribute('data-entity-id')] = parseInt(select.value, 10);
-                }
-            });
+                    // Get configuration selections
+                    const configSelects = container.querySelectorAll('.qaseConfig');
+                    configSelects.forEach(select => {
+                        if (select.value) {
+                            runData.configurations[select.getAttribute('data-entity-id')] = parseInt(select.value, 10);
+                        }
+                    });
 
-            // Get TeamCity build selections
-            const tcBuilds = container.querySelectorAll('.teamcity-build:checked');
-            runData.tcBuilds = Array.from(tcBuilds).map(b => b.dataset.id);
+                    // Get TeamCity build selections
+                    const tcBuilds = container.querySelectorAll('.teamcity-build:checked');
+                    runData.tcBuilds = Array.from(tcBuilds).map(b => b.dataset.id);
 
-            try {
-                AviatorShared.showLoading('Creating test run...');
-                await Traciator.createTraceabilityTestRunWithData(runData);
-                AviatorShared.hideLoading();
-                closeModal();
-                // Don't close the parent modal - let user decide if they want to stay or leave
-            } catch (error) {
-                AviatorShared.hideLoading();
-                console.error('Error creating test run:', error);
-                alert('Failed to create test run. See console for details.');
-            }
-                }
-            }
-        });
-
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeModal();
-        });
-    },
-
-    shouldShowTraciatorFeaturePopup: function () {
-        const seenVersion = localStorage.getItem("traciatorLastFeaturePopup") || "";
-        if (seenVersion !== Traciator.version) {
-            localStorage.setItem("traciatorLastFeaturePopup", Traciator.version);
-            return true;
-        }
-        return false;
-    },
-
-    showTraciatorFeaturePopup: function () {
-        // Ensure shadow root exists
-        if (!AviatorShared.shadowRoot) {
-            AviatorShared.createShadowRootOverlay();
-        }
-
-        // overlay
-        const overlay = document.createElement("div");
-        Object.assign(overlay.style, {
-            position: "fixed",
-            top: "0",
-            left: "0",
-            width: "100%",
-            height: "100%",
-            background: "rgba(0,0,0,0.65)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: "999999" // sits above everything including main modal
-        });
-
-        // modal box
-        const box = document.createElement("div");
-        box.classList = 'qasePopup'
-        box.id = 'qasePopup'
-
-        Object.assign(box.style, {
-            padding: "20px 24px",
-            borderRadius: "10px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-            /* size behavior */
-            minWidth: "250px",   // won't shrink below this
-            maxWidth: "600px",   // won't grow beyond this
-            width: "auto",       // lets it size based on content
-            boxSizing: "border-box",
-            /* layout */
-            display: "flex",
-            flexDirection: "column",   // stack title, text, button
-            justifyContent: "center",
-            alignItems: "center",
-        });
-
-        box.innerHTML = `
-            <h2 style="margin-top:0">🔍 Traciator Changelog 🔍</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.0.0</div>
-                    <div class="changelog-description">Initial Traciator release! Generate comprehensive traceability reports from release pages.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">Core Features</div>
-                    <ul class="changelog-feature-list">
-                        <li>Visual test coverage mapping between Jira issues, test cases, and test runs</li>
-                        <li>Export detailed CSV reports for stakeholder analysis</li>
-                        <li>Create test runs directly from traceability data</li>
-                        <li>Real-time test run statistics and coverage indicators</li>
-                        <li>Smart filtering by specific Jira keys from release pages</li>
-                        <li>Distinct test case counting across multiple data sources</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">How to use</div>
-                    <div class="changelog-text">Navigate to any Jira release page and click the 🔍 Traciator button to generate your traceability report!</div>
-                </div>
-            </div>
-              <button id="traciator-feature-ok" class="btn primary" style="margin-top: 10px">Got it</button>
-            `;
-
-        overlay.appendChild(box);
-        AviatorShared.shadowRoot.appendChild(overlay);
-
-        // Set up close button using centralized utility
-        AviatorShared.addEventListeners(overlay, {
-            '#traciator-feature-ok': {
-                'click': () => {
-                    overlay.remove();
+                    try {
+                        AviatorShared.showLoading('Creating test run...');
+                        await Traciator.createTraceabilityTestRunWithData(runData);
+                        AviatorShared.hideLoading();
+                        closeModal();
+                        // Don't close the parent modal - let user decide if they want to stay or leave
+                    } catch (error) {
+                        AviatorShared.hideLoading();
+                        console.error('Error creating test run:', error);
+                        alert('Failed to create test run. See console for details.');
+                        if (createBtn) createBtn.disabled = false;
+                    }
                 }
             }
         });
     },
 
     createTraceabilityTestRunWithData: async function (runData) {
-        const projectCode = AviatorShared.configuration.getQaseProjectCode();
-        const token = AviatorShared.configuration.getQaseApiToken();
+        // Single-flight guard: if called twice (e.g., double click), reuse the in-flight promise
+        if (Traciator._createTraceabilityTestRunPromise) return Traciator._createTraceabilityTestRunPromise;
 
-        // Filter out any null, undefined, or invalid case IDs
-        const validCaseIds = runData.caseIds.filter(id => id != null && !isNaN(id) && id > 0);
+        Traciator._createTraceabilityTestRunPromise = (async () => {
+            const projectCode = AviatorShared.configuration.getQaseProjectCode();
+            const token = AviatorShared.configuration.getQaseApiToken();
 
-        // Validate required data
-        if (!runData.title || !validCaseIds || validCaseIds.length === 0) {
-            throw new Error('Missing required run data: title and valid case IDs are required');
-        }
+            // Filter out any null, undefined, or invalid case IDs
+            const validCaseIds = runData.caseIds.filter(id => id != null && !isNaN(id) && id > 0);
 
-        // Build payload with proper null handling for optional fields
-        const payload = {
-            title: runData.title,
-            cases: validCaseIds
-        };
-
-        // Only add optional fields if they have valid values
-        if (runData.environment && runData.environment.id) {
-            payload.environment_id = parseInt(runData.environment.id, 10);
-        }
-
-        if (runData.milestone && runData.milestone.id) {
-            payload.milestone_id = parseInt(runData.milestone.id, 10);
-        }
-
-        if (runData.configurations && Object.keys(runData.configurations).length > 0) {
-            payload.configurations = runData.configurations;
-        }
-
-        const response = await AviatorShared.api({
-            method: 'POST',
-            url: `https://api.qase.io/v1/run/${projectCode}`,
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Token': token
-            },
-            data: payload
-        });
-
-        const runId = response.result.id;
-
-        // Send data to slack for usage tracking
-        await AviatorShared.slack.sendResultToSlack(runData);
-
-        // Trigger any TeamCity builds
-        if (runData.tcBuilds && runData.tcBuilds.length > 0) {
-            try {
-                await AviatorShared.teamcity.triggerTeamCityBuilds(runId, runData.caseIds);
-            } catch (error) {
-                console.warn('Failed to trigger TeamCity builds:', error);
+            // Validate required data
+            if (!runData.title || !validCaseIds || validCaseIds.length === 0) {
+                throw new Error('Missing required run data: title and valid case IDs are required');
             }
-        }
 
-        // Associate with Jira issue if selected
-        if (runData.jiraKey) {
-            try {
-                AviatorShared.showLoading('Associating test run with Jira issue...');
-                await AviatorShared.api({
-                    method: 'POST',
-                    url: `https://api.qase.io/v1/run/${projectCode}/external-issue`,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Token': token
-                    },
-                    data: {
-                        type: 'jira-cloud',
-                        links: [{ run_id: runId, external_issue: runData.jiraKey }]
-                    }
-                });
+            // Build payload with proper null handling for optional fields
+            const payload = {
+                title: runData.title,
+                cases: validCaseIds
+            };
 
-                console.log(`Qase: Test run ${runId} successfully associated with Jira issue ${runData.jiraKey}`);
-                AviatorShared.showMessagePopup(`Test run created and associated successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nJira Issue: ${runData.jiraKey}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
-
-            } catch (associationError) {
-                console.warn('Failed to associate test run with Jira issue:', associationError);
-                AviatorShared.showMessagePopup(`Test run created successfully!\n⚠️ Warning: Could not associate with Jira issue ${runData.jiraKey}\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
+            // Only add optional fields if they have valid values
+            if (runData.environment && runData.environment.id) {
+                payload.environment_id = parseInt(runData.environment.id, 10);
             }
-        } else {
-            AviatorShared.showMessagePopup(`Test run created successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
+
+            if (runData.milestone && runData.milestone.id) {
+                payload.milestone_id = parseInt(runData.milestone.id, 10);
+            }
+
+            if (runData.configurations && Object.keys(runData.configurations).length > 0) {
+                payload.configurations = runData.configurations;
+            }
+
+            const response = await AviatorShared.api({
+                method: 'POST',
+                url: `https://api.qase.io/v1/run/${projectCode}`,
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Token': token
+                },
+                data: payload
+            });
+
+            const runId = response.result.id;
+
+            // Send data to slack for usage tracking
+            await AviatorShared.slack.sendResultToSlack(runData);
+
+            // Prepare summary for unified status modal
+            const summary = {
+                runId,
+                title: runData.title,
+                caseCount: runData.caseIds.length,
+                jiraKey: runData.jiraKey,
+                associationStatus: null,
+                associationMessage: null
+            };
+
+            // Associate with Jira issue if selected
+            if (runData.jiraKey) {
+                try {
+                    AviatorShared.showLoading('Associating test run with Jira issue...');
+                    await AviatorShared.api({
+                        method: 'POST',
+                        url: `https://api.qase.io/v1/run/${projectCode}/external-issue`,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Token': token
+                        },
+                        data: {
+                            type: 'jira-cloud',
+                            links: [{ run_id: runId, external_issue: runData.jiraKey }]
+                        }
+                    });
+
+                    console.log(`Qase: Test run ${runId} successfully associated with Jira issue ${runData.jiraKey}`);
+                    summary.associationStatus = 'linked';
+                    summary.associationMessage = `Linked to Jira issue ${runData.jiraKey}`;
+
+                } catch (associationError) {
+                    console.warn('Failed to associate test run with Jira issue:', associationError);
+                    summary.associationStatus = 'failed';
+                    summary.associationMessage = `Warning: Could not associate with Jira issue ${runData.jiraKey}`;
+                }
+            }
+
+            // Trigger any TeamCity builds (or show success-only modal when none)
+            if (runData.tcBuilds && runData.tcBuilds.length > 0) {
+                try {
+                    await AviatorShared.teamcity.triggerTeamCityBuilds(runId, runData.caseIds, { summary });
+                } catch (error) {
+                    console.warn('Failed to trigger TeamCity builds:', error);
+                    // still show summary-only modal to confirm run creation
+                    AviatorShared.showStatusModal([], { summary });
+                }
+            } else {
+                AviatorShared.showStatusModal([], { summary });
+            }
+        })();
+
+        try {
+            return await Traciator._createTraceabilityTestRunPromise;
+        } finally {
+            Traciator._createTraceabilityTestRunPromise = null;
         }
     }
 }

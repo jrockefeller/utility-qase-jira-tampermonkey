@@ -638,13 +638,67 @@ const AviatorShared = {
         });
     },
 
+    validation: {
+        setupRunTitleValidation: function (options = {}) {
+            const {
+                root = AviatorShared.shadowRoot || document,
+                minLength = 5
+            } = options;
+
+            const scope = root || document;
+            const runTitleInput = scope.querySelector('#qaseRunTitle');
+            if (!runTitleInput) {
+                return { validate: () => true, input: null, errorEl: null };
+            }
+
+            let errorEl = scope.querySelector('#qaseRunTitleError');
+            if (!errorEl) {
+                errorEl = document.createElement('div');
+                errorEl.id = 'qaseRunTitleError';
+                errorEl.style.color = 'red';
+                errorEl.style.fontSize = '0.85rem';
+                errorEl.style.marginTop = '-4px';
+                errorEl.style.marginBottom = '8px';
+                errorEl.style.display = 'none';
+                runTitleInput.insertAdjacentElement('afterend', errorEl);
+            }
+
+            const validateRunTitle = () => {
+                const value = runTitleInput.value.trim();
+                if (!value) {
+                    errorEl.textContent = 'Run title is required.';
+                    errorEl.style.display = 'block';
+                    return false;
+                }
+                if (value.length < minLength) {
+                    errorEl.textContent = `Run title must be at least ${minLength} characters.`;
+                    errorEl.style.display = 'block';
+                    return false;
+                }
+
+                errorEl.style.display = 'none';
+                return true;
+            };
+
+            if (!runTitleInput.dataset.runTitleValidationBound) {
+                runTitleInput.addEventListener('input', validateRunTitle);
+                runTitleInput.dataset.runTitleValidationBound = 'true';
+            }
+
+            return { validate: validateRunTitle, input: runTitleInput, errorEl };
+        }
+    },
+
     configuration: {
         getQaseApiToken: () => window?.aviator?.qase?.token ?? null,
 
         checkQaseApiToken: function () {
             const token = AviatorShared.configuration.getQaseApiToken();
             if (!token) {
-                AviatorShared.showMessagePopup('No Qase API token set.', 'warning', AviatorShared.hidePopup)
+                AviatorShared.showStatusModal([], {
+                    notification: { message: 'No Qase API token set.', type: 'warning' },
+                    onClose: AviatorShared.hidePopup
+                });
                 return false;
             }
             return true;
@@ -655,7 +709,10 @@ const AviatorShared = {
         checkQaseProjectCode: function () {
             const code = AviatorShared.configuration.getQaseProjectCode();
             if (!code) {
-                AviatorShared.showMessagePopup('No Qase Project Code set.', 'warning', AviatorShared.hidePopup)
+                AviatorShared.showStatusModal([], {
+                    notification: { message: 'No Qase Project Code set.', type: 'warning' },
+                    onClose: AviatorShared.hidePopup
+                });
                 return false;
             }
             return true;
@@ -692,101 +749,230 @@ const AviatorShared = {
 
     shouldClosePopup: () => AviatorShared.shadowRoot?.getElementById('keep-open')?.checked !== true,
 
-    showMessagePopup: function (message, type, onClose) {
+    showStatusModal: function (builds, options = {}) {
+        const { summary = null, notification = null, closeParentPopup = false, onClose = null } = options;
 
-        AviatorShared.createShadowRootOverlay()
+        const buildsArray = builds ? Array.from(builds) : [];
+        const buildCount = buildsArray.length;
+        const hasSummary = Boolean(summary);
+        const hasNotification = Boolean(notification);
 
-        // Remove any existing message overlays first
-        const existingMessageOverlay = AviatorShared.shadowRoot.querySelector('.qase-message-overlay');
-        if (existingMessageOverlay) {
-            existingMessageOverlay.remove();
+        // Ensure shadow root exists
+        if (!AviatorShared.shadowRoot) {
+            AviatorShared.createShadowRootOverlay();
         }
 
-        // Create overlay using centralized utility
-        const overlay = AviatorShared.createOverlay({
-            position: 'absolute',
-            className: 'qase-message-overlay',
-            zIndex: '9999'
-        });
-
-        // modal box
-        const box = document.createElement("div");
-        box.classList = 'qasePopup'
-        box.id = 'messagePopup'
-
-        Object.assign(box.style, {
-            padding: "20px 24px",
-            borderRadius: "10px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-            /* size behavior */
-            minWidth: "250px",   // won’t shrink below this
-            maxWidth: "600px",   // won’t grow beyond this
-            width: "auto",       // lets it size based on content
-            boxSizing: "border-box",
-            /* layout */
-            display: "flex",
-            flexDirection: "column",   // stack title, text, button
-            justifyContent: "center",
-            alignItems: "center",
-        });
-
-
-        // Determine title and button text based on message content
-        const isSuccess = type.toLowerCase() == 'success'
-        const isWarning = type.toLowerCase() == 'warning'
-
-        let title, buttonText;
-        if (isSuccess) {
-            title = 'Success';
-            buttonText = 'Great!';
-        } else if (isWarning) {
-            title = 'Warning';
-            buttonText = 'Got it';
-        } else {
-            title = 'Oops';
-            buttonText = 'Got it';
+        // Remove any existing status modal
+        const existingModal = AviatorShared.shadowRoot.querySelector('#status-modal');
+        if (existingModal) {
+            existingModal.remove();
         }
 
-        box.innerHTML = `
-            <h2 style="margin-top:0">${title}</h2>
-            <div style="font-size:14px; line-height:1.5; text-align: center;">${message}</div>
-            <button id="popup-ok" class="btn primary" style="margin-top: 10px">${buttonText}</button>
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'teamcity-build-status-overlay';
+        Object.assign(overlay.style, {
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: '100%',
+            height: '100%',
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: '999998',
+            fontFamily: '"Segoe UI", Arial, sans-serif'
+        });
+
+        // Create modal box
+        const modal = document.createElement('div');
+        modal.id = 'status-modal';
+        modal.className = 'qasePopup';
+        Object.assign(modal.style, {
+            width: '90%',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column'
+        });
+
+        // Header
+        const header = document.createElement('div');
+        const headerTitle = hasSummary
+            ? 'Test Run'
+            : hasNotification
+                ? (notification.title || ((notification.type || '').toLowerCase() === 'error' ? '❌ Error' : ((notification.type || '').toLowerCase() === 'warning' ? '⚠️ Warning' : 'ℹ️ Notice')))
+                : '🚀 TeamCity Build Status';
+
+        header.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h2 id="status-modal-title" style="margin: 0; color: var(--text);">${headerTitle}</h2>
+                    <button id="close-build-status-modal" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text);">&times;</button>
+                </div>
             `;
 
-        /*  */
+        // Body container to hold success + builds
+        const body = document.createElement('div');
+        body.style.display = 'flex';
+        body.style.flexDirection = 'column';
+        body.style.gap = '12px';
+        body.style.overflowY = 'auto';
+        body.style.maxHeight = '60vh';
+        body.style.padding = '4px';
 
-        overlay.appendChild(box);
+        // Success summary block (optional)
+        if (hasSummary) {
+            const successBlock = document.createElement('div');
+            successBlock.id = 'teamcity-run-success';
+            successBlock.style.cssText = `
+                    padding: 12px;
+                    border: 1px solid var(--border);
+                    border-radius: 8px;
+                    background: var(--bg-card);
+                `;
+
+            const caseLine = typeof summary.caseCount === 'number'
+                ? `${summary.caseCount} case${summary.caseCount === 1 ? '' : 's'}`
+                : null;
+
+            const metaParts = [];
+            if (summary.runId) metaParts.push(`Run ID: ${summary.runId}`);
+            if (caseLine) metaParts.push(caseLine);
+
+            const metaLine = metaParts.length ? metaParts.join(' • ') : '';
+
+            successBlock.innerHTML = `
+                    <div style="display: flex; align-items: flex-start; gap: 10px;">
+                        <div style="font-size: 22px;">✅</div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--text); margin-bottom: 4px;">Created successfully</div>
+                            ${summary.title ? `<div id="status-modal-summary-title" style="color: var(--text); margin-bottom: 4px; word-break: break-word;">${summary.title}</div>` : ''}
+                            ${metaLine ? `<div id="status-modal-summary-subline" style="color: var(--text-muted); font-size: 0.9rem;">${metaLine}</div>` : ''}
+                            ${summary.associationMessage ? `<div id="status-modal-summary-association" style="margin-top: 6px; color: ${summary.associationStatus === 'failed' ? '#f44336' : 'var(--text)'}; font-size: 0.9rem;">${summary.associationMessage}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+
+            body.appendChild(successBlock);
+        }
+
+        // Generic notification block (optional)
+        if (hasNotification) {
+            const note = notification || {};
+
+            const notificationBlock = document.createElement('div');
+            notificationBlock.id = 'status-modal-generic-notification';
+            notificationBlock.style.cssText = `
+                    padding: 12px;
+                    border: 1px solid var(--border);
+                    border-radius: 8px;
+                    background: var(--bg-card);
+                `;
+
+            notificationBlock.innerHTML = `
+                    <div style="display: flex; align-items: flex-start; gap: 10px;">
+                        <div style="flex: 1;">
+                            ${note.title ? `<div id="status-modal-title" style=\"font-weight: 600; color: var(--text); margin-bottom: 4px;\">${note.title}</div>` : ''}
+                            ${note.message ? `<div id="status-modal-message" style=\"color: var(--text); margin-bottom: 4px; word-break: break-word;\">${note.message}</div>` : ''}
+                            ${note.detail ? `<div id="status-modal-detail" style=\"color: var(--text-muted); font-size: 0.9rem;\">${note.detail}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+
+            body.appendChild(notificationBlock);
+        }
+
+        // Build status list (only when builds exist)
+        if (buildCount > 0) {
+            const listHeader = document.createElement('div');
+            listHeader.style.cssText = 'font-weight: 600; color: var(--text);';
+            listHeader.textContent = 'TeamCity builds';
+            body.appendChild(listHeader);
+
+            const statusList = document.createElement('div');
+            statusList.id = 'build-status-list';
+            Object.assign(statusList.style, {
+                maxHeight: '320px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                padding: '4px'
+            });
+
+            // Create status rows for each build
+            buildsArray.forEach(buildElement => {
+                const buildId = buildElement.dataset.id;
+                const buildName = (buildElement.parentElement.textContent || '')
+                    .replace(/\s+/g, ' ')
+                    .trim() || buildId;
+
+                const statusRow = document.createElement('div');
+                statusRow.id = `build-status-${buildId}`;
+                statusRow.style.cssText = `
+                        display: flex;
+                        align-items: flex-start;
+                        padding: 12px;
+                        border: 1px solid var(--border);
+                        border-radius: 6px;
+                        background: var(--bg-card);
+                        gap: 12px;
+                    `;
+
+                statusRow.innerHTML = `
+                        <div class="status-icon" style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">
+                            <div style="width: 16px; height: 16px; border: 2px solid #ccc; border-top: 2px solid #0052CC; border-radius: 50%; animation: qase-spin 1s linear infinite;"></div>
+                        </div>
+                        <div style="flex: 0 1 320px; min-width: 220px; max-width: 420px;">
+                            <div class="build-name" style="font-weight: 500; color: var(--text); word-break: normal; overflow-wrap: break-word;">${buildName}</div>
+                            <div class="build-id" style="font-size: 12px; color: var(--text-muted); margin-top: 2px; overflow-wrap: anywhere; word-break: break-word;">${buildId}</div>
+                        </div>
+                        <div class="status-message" style="flex: 1 1 auto; min-width: 0; color: var(--text-muted); font-size: 13px; white-space: normal; overflow-wrap: anywhere; word-break: break-word;">Waiting...</div>
+                    `;
+
+                statusList.appendChild(statusRow);
+            });
+
+            body.appendChild(statusList);
+        }
+
+        if (buildCount === 0 && !hasSummary && !hasNotification) {
+            const emptyState = document.createElement('div');
+            emptyState.style.cssText = 'color: var(--text-muted); font-size: 0.95rem;';
+            emptyState.textContent = 'No TeamCity builds selected.';
+            body.appendChild(emptyState);
+        }
+
+        // Footer
+        const footer = document.createElement('div');
+        footer.innerHTML = `
+                <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+                    <button id="close-build-status-modal-2" class="btn secondary">Close</button>
+                </div>
+            `;
+
+        modal.appendChild(header);
+        modal.appendChild(body);
+        modal.appendChild(footer);
+
+        overlay.appendChild(modal);
         AviatorShared.shadowRoot.appendChild(overlay);
 
-        // Set up close button using centralized utility
-        AviatorShared.addEventListeners(overlay, {
-            '#popup-ok': {
-                'click': () => {
-                    overlay.remove();
-
-                    // Also remove from shadow root if still there
-                    if (AviatorShared.shadowRoot && AviatorShared.shadowRoot.contains(overlay)) {
-                        AviatorShared.shadowRoot.removeChild(overlay);
-                    }
-
-                    // Check if shadow root only contains styles (indicating no other modals are open)
-                    const shadowRootChildren = AviatorShared.shadowRoot ? Array.from(AviatorShared.shadowRoot.children) : [];
-                    const onlyStylesRemain = shadowRootChildren.length === 1 && shadowRootChildren[0].tagName === 'STYLE';
-
-                    // If only styles remain, remove the main overlay container
-                    if (onlyStylesRemain) {
-                        const mainOverlay = document.getElementById('qasePopupOverlay');
-                        if (mainOverlay) {
-                            mainOverlay.remove();
-                            AviatorShared.shadowRoot = null; // Reset shadow root reference
-                        }
-                    }
-
-                    if (typeof onClose == 'function') {
-                        onClose();
-                    }
-                }
+        const closeModal = () => {
+            overlay.remove();
+            if (closeParentPopup && AviatorShared.shouldClosePopup()) {
+                AviatorShared.hidePopup();
             }
+            if (typeof onClose === 'function') {
+                onClose();
+            }
+        };
+
+        AviatorShared.addEventListeners(overlay, {
+            '#close-build-status-modal': { 'click': closeModal },
+            '#close-build-status-modal-2': { 'click': closeModal }
         });
     },
 
@@ -1002,7 +1188,7 @@ const AviatorShared = {
         },
     },
 
-    api: async function ({ method, url, headers = {}, data = null }) {
+    api: async function ({ method, url, headers = {}, data = null, includeHttpInfo = false, withCredentials = false, anonymous = false }) {
         const tryParseJSON = (text) => {
             try {
                 return JSON.parse(text);
@@ -1015,11 +1201,26 @@ const AviatorShared = {
             const request = {
                 method,
                 url,
+                anonymous,
+                withCredentials,
                 onload: res => {
 
-                    const data = tryParseJSON(res.responseText)
-                    if (data) resolve(data)
-                    else resolve(res.responseText)
+                    const parsed = tryParseJSON(res.responseText)
+                    const payload = parsed ?? res.responseText
+
+                    if (includeHttpInfo) {
+                        resolve({
+                            data: payload,
+                            http: {
+                                status: res.status,
+                                statusText: res.statusText,
+                                responseHeaders: res.responseHeaders
+                            }
+                        });
+                        return;
+                    }
+
+                    resolve(payload)
                 },
                 onerror: err => {
                     console.log(url, err)
@@ -1088,112 +1289,303 @@ const AviatorShared = {
             return allTestCases;
         },
 
-        fetchTestRunsWithPagination: async function (projectCode, startDate, jiraKeys = []) {
+          fetchTestRunsWithPagination: async function (projectCode, startDate, jiraKeys = []) {
             const allTestRuns = [];
-            const limit = 100; // Optimal batch size for API efficiency
+            const limit = 100; // Qase API enforces limit <= 100
             const cutoffDate = startDate || new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-            const fromStartTime = Math.floor(cutoffDate.getTime() / 1000); // Convert to Unix timestamp
+            const fromStartTime = Math.floor(cutoffDate.getTime() / 1000); // Unix timestamp
+            const token = AviatorShared.configuration.getQaseApiToken();
+            const jiraKeysSet = new Set((jiraKeys || []).map(k => String(k).toUpperCase()));
+
+            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+            const buildRunsUrl = ({ limit, offset, include }) => `https://api.qase.io/v1/run/${projectCode}?limit=${limit}&offset=${offset}&from_start_time=${fromStartTime}&include=${encodeURIComponent(include)}`;
+
+            const extractJiraKey = (externalIssue) => {
+                if (!externalIssue || typeof externalIssue !== 'object') return null;
+                const candidates = [
+                    externalIssue.id,
+                    externalIssue.key,
+                    externalIssue.external_id,
+                    externalIssue.externalId,
+                    externalIssue.name,
+                    externalIssue.title
+                ];
+                for (const candidate of candidates) {
+                    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+                }
+                if (typeof externalIssue.url === 'string') {
+                    const match = externalIssue.url.match(/\/browse\/([A-Z]+-\d+)/i);
+                    if (match) return match[1];
+                }
+                return null;
+            };
+
+            const isRunForJiraKeys = (run) => {
+                if (jiraKeysSet.size === 0) return true;
+                const key = extractJiraKey(run?.external_issue);
+                if (!key) return false;
+                return jiraKeysSet.has(String(key).toUpperCase());
+            };
+
+            const apiGetWithRetry = async (url, maxRetries = 5) => {
+                let attempt = 0;
+                while (true) {
+                    attempt++;
+                    try {
+                        const response = await AviatorShared.api({
+                            method: 'GET',
+                            url,
+                            headers: { 'Token': token }
+                        });
+
+                        if (response && response.status === false) {
+                            const msg = response.errorMessage || response.error || 'Qase API returned status:false';
+                            throw new Error(msg);
+                        }
+
+                        return { response, attempts: attempt };
+                    } catch (error) {
+                        if (attempt > maxRetries) throw error;
+
+                        const backoffMs = Math.min(8000, 250 * Math.pow(2, attempt - 1)) + Math.floor(Math.random() * 250);
+                        console.warn(`Retrying Qase request (attempt ${attempt}/${maxRetries}) in ${backoffMs}ms:`, url, error);
+                        await sleep(backoffMs);
+                    }
+                }
+            };
+
+            const mapWithConcurrency = async (items, concurrency, mapper) => {
+                const results = new Array(items.length);
+                let nextIndex = 0;
+                const worker = async () => {
+                    while (true) {
+                        const idx = nextIndex;
+                        if (idx >= items.length) return;
+                        nextIndex++;
+                        results[idx] = await mapper(items[idx], idx);
+                    }
+                };
+                const workers = Array.from({ length: Math.max(1, concurrency) }, () => worker());
+                await Promise.all(workers);
+                return results;
+            };
+
+            const mapAdaptiveConcurrency = async (items, opts, mapper) => {
+                const results = [];
+                let concurrency = Math.max(opts.minConcurrency, Math.min(opts.maxConcurrency, opts.initialConcurrency));
+                const batchSize = Math.max(1, opts.batchSize);
+
+                for (let start = 0; start < items.length; start += batchSize) {
+                    const batch = items.slice(start, start + batchSize);
+                    const batchResults = await mapWithConcurrency(batch, concurrency, mapper);
+                    results.push(...batchResults);
+
+                    const totalRequests = batchResults.length;
+                    const totalAttempts = batchResults.reduce((acc, r) => acc + (r?.attempts || 1), 0);
+                    const totalRetries = totalAttempts - totalRequests;
+                    const retryRate = totalRequests === 0 ? 0 : totalRetries / totalRequests;
+
+                    if (retryRate >= 0.25 && concurrency > opts.minConcurrency) {
+                        concurrency = Math.max(opts.minConcurrency, concurrency - 1);
+                    } else if (retryRate <= 0.05 && concurrency < opts.maxConcurrency) {
+                        concurrency = Math.min(opts.maxConcurrency, concurrency + 1);
+                    }
+                }
+
+                return results;
+            };
+
+            const reportProgress = (() => {
+                let lastAt = 0;
+                let lastKey = '';
+                let lastCurrent = 0;
+                const minIntervalMs = 250;
+
+                return (key, message, progress, force = false) => {
+                    if (!window.qaseTrackChunks || !window.qaseProgressCallback) return;
+                    const now = Date.now();
+
+                    const current = progress?.current ?? 0;
+                    const total = progress?.total ?? 0;
+                    const isComplete = total > 0 && current >= total;
+
+                    if (!force) {
+                        if (key === lastKey && current === lastCurrent && !isComplete) return;
+                        if (now - lastAt < minIntervalMs && !isComplete) return;
+                    }
+
+                    lastAt = now;
+                    lastKey = key;
+                    lastCurrent = current;
+
+                    window.qaseProgressCallback(message, progress);
+                };
+            })();
 
             try {
-                console.log(`Fetching test runs from ${cutoffDate.toISOString()} (timestamp: ${fromStartTime})...`);
+                const initial = await apiGetWithRetry(
+                    buildRunsUrl({ limit: 1, offset: 0, include: jiraKeysSet.size > 0 ? 'external_issue' : 'external_issue,cases' }),
+                    5
+                );
+                const initialResponse = initial.response;
 
-                // Get total count with date filter
-                const initialResponse = await AviatorShared.api({
-                    method: 'GET',
-                    url: `https://api.qase.io/v1/run/${projectCode}?limit=1&offset=0&from_start_time=${fromStartTime}&include=external_issue%2Ccases`,
-                    headers: { 'Token': AviatorShared.configuration.getQaseApiToken() }
-                });
-
-                if (!initialResponse.result) {
+                if (!initialResponse || !initialResponse.result) {
                     return allTestRuns;
                 }
 
-                const totalRuns = initialResponse.result.total;
-                console.log(`Found ${totalRuns} runs since cutoff date, fetching all data in parallel...`);
+                const totalRunsAll = initialResponse.result.total;
+                const totalRunsFiltered = (typeof initialResponse.result.filtered === 'number') ? initialResponse.result.filtered : null;
+                const totalRuns = (typeof totalRunsFiltered === 'number') ? totalRunsFiltered : totalRunsAll;
 
-                if (totalRuns === 0) {
-                    return allTestRuns;
-                }
+                if (totalRuns === 0) return allTestRuns;
 
-                // Calculate total batches needed to get all data
                 const totalBatches = Math.ceil(totalRuns / limit);
 
-                // Process in chunks to avoid overwhelming the API
-                const chunkSize = 25; // Process 25 requests at a time
-                const chunks = [];
+                if (jiraKeysSet.size > 0) {
+                    const offsetsWithHits = new Set();
+                    const refetchQueue = [];
+                    let scanCompleted = 0;
+                    let refetchCompleted = 0;
+                    let scanDone = false;
 
-                for (let i = 0; i < totalBatches; i += chunkSize) {
-                    const chunk = [];
-                    for (let j = i; j < Math.min(i + chunkSize, totalBatches); j++) {
-                        const offset = j * limit;
-                        chunk.push({ offset, index: j });
-                    }
-                    chunks.push(chunk);
-                }
+                    let scanNextOffset = 0;
+                    const scanMaxOffsetExclusive = totalBatches * limit;
+                    let scanStopOffset = null;
 
-                console.log(`Processing ${totalBatches} batches in ${chunks.length} chunks of ${chunkSize}...`);
+                    const wakeQueue = (() => {
+                        const waiters = [];
+                        const notify = () => {
+                            while (waiters.length) {
+                                const w = waiters.shift();
+                                try { w(); } catch (_) { }
+                            }
+                        };
+                        const wait = () => new Promise(resolve => waiters.push(resolve));
+                        return { notify, wait };
+                    })();
 
-                // Process each chunk sequentially, but requests within chunk in parallel
-                for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-                    const chunk = chunks[chunkIndex];
-                    console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length} (${chunk.length} requests)...`);
+                    const enqueueRefetchOffset = (offset) => {
+                        if (offsetsWithHits.has(offset)) return;
+                        offsetsWithHits.add(offset);
+                        refetchQueue.push(offset);
+                        wakeQueue.notify();
+                    };
 
-                    // Update progress if we're tracking chunks from traceability report
-                    if (window.qaseTrackChunks && window.qaseProgressCallback) {
-                        window.qaseProgressCallback(`Fetching test runs... (chunk ${chunkIndex + 1}/${chunks.length})`, {
-                            current: chunkIndex + 1,
-                            total: chunks.length
-                        });
-                    }
+                    const takeRefetchOffset = async () => {
+                        while (refetchQueue.length === 0) {
+                            if (scanDone) return null;
+                            await wakeQueue.wait();
+                        }
+                        return refetchQueue.shift();
+                    };
 
-                    const promises = chunk.map(({ offset, index }) => {
-                        const url = `https://api.qase.io/v1/run/${projectCode}?limit=${limit}&offset=${offset}&from_start_time=${fromStartTime}&include=external_issue%2Ccases`;
+                    const scanConcurrency = 4;
+                    const refetchConcurrency = 2;
 
-                        return AviatorShared.api({
-                            method: 'GET',
-                            url: url,
-                            headers: { 'Token': AviatorShared.configuration.getQaseApiToken() }
-                        }).then(response => ({ response, offset, index }))
-                            .catch(error => {
-                                console.warn(`Failed to fetch runs at offset ${offset}:`, error);
-                                return { response: null, offset, index };
-                            });
-                    });
+                    const scanWorker = async () => {
+                        while (true) {
+                            if (scanStopOffset != null && scanNextOffset > scanStopOffset) return;
+                            if (scanNextOffset >= scanMaxOffsetExclusive) return;
 
-                    const chunkResults = await Promise.all(promises);
+                            const offset = scanNextOffset;
+                            scanNextOffset += limit;
 
-                    // Sort by index to maintain order and process results
-                    chunkResults.sort((a, b) => a.index - b.index);
+                            const res = await apiGetWithRetry(buildRunsUrl({ limit, offset, include: 'external_issue' }), 5);
+                            const entities = res.response?.result?.entities || [];
 
-                    for (const { response, offset, index } of chunkResults) {
-                        if (!response || !response.result || !response.result.entities) continue;
-
-                        const runs = response.result.entities;
-                        if (runs.length === 0) continue;
-
-                        // Filter only runs with external issues (date already filtered by API)
-                        const filteredRuns = runs.filter(run => {
-                            if (!run.external_issue || !run.external_issue.id) return false;
-
-                            // If jiraKeys are provided, only include runs for those specific keys
-                            if (jiraKeys.length === 0 || jiraKeys.includes(run.external_issue.id)) {
-                                return true;
+                            if (Array.isArray(entities) && entities.length < limit) {
+                                scanStopOffset = offset;
                             }
 
-                            return false;
-                        });
+                            let hasHit = false;
+                            if (Array.isArray(entities)) {
+                                for (const run of entities) {
+                                    if (isRunForJiraKeys(run)) { hasHit = true; break; }
+                                }
+                            }
+                            if (hasHit) enqueueRefetchOffset(offset);
 
-                        allTestRuns.push(...filteredRuns);
-                    }
+                            scanCompleted++;
+                            reportProgress(
+                                'scan',
+                                `Scanning test runs... (${scanCompleted}/${totalBatches})`,
+                                { current: scanCompleted, total: totalBatches }
+                            );
+                        }
+                    };
+
+                    const refetchWorker = async () => {
+                        while (true) {
+                            const offset = await takeRefetchOffset();
+                            if (offset == null) return;
+
+                            const res = await apiGetWithRetry(buildRunsUrl({ limit, offset, include: 'external_issue,cases' }), 5);
+                            const runs = res.response?.result?.entities;
+                            if (Array.isArray(runs) && runs.length > 0) {
+                                const filtered = runs.filter(run => {
+                                    if (!run || !run.external_issue) return false;
+                                    return isRunForJiraKeys(run);
+                                });
+                                allTestRuns.push(...filtered);
+                            }
+
+                            refetchCompleted++;
+                            reportProgress(
+                                'refetch',
+                                `Fetching matching runs... (${refetchCompleted})`,
+                                { current: refetchCompleted, total: Math.max(refetchCompleted, offsetsWithHits.size) }
+                            );
+                        }
+                    };
+
+                    const scanWorkers = Array.from({ length: scanConcurrency }, () => scanWorker());
+                    const refetchWorkers = Array.from({ length: refetchConcurrency }, () => refetchWorker());
+
+                    await Promise.all(scanWorkers);
+                    scanDone = true;
+                    wakeQueue.notify();
+                    await Promise.all(refetchWorkers);
+
+                    return allTestRuns;
                 }
 
-                console.log(`Collected ${allTestRuns.length} test runs with external issues`);
+                const offsets = Array.from({ length: totalBatches }, (_, i) => i * limit);
+                let allCompleted = 0;
+
+                const results = await mapAdaptiveConcurrency(
+                    offsets,
+                    { initialConcurrency: 6, minConcurrency: 2, maxConcurrency: 6, batchSize: 25 },
+                    async (offset) => {
+                        const res = await apiGetWithRetry(buildRunsUrl({ limit, offset, include: 'external_issue,cases' }), 5);
+
+                        allCompleted++;
+                        reportProgress(
+                            'all',
+                            `Fetching test runs... (${allCompleted}/${offsets.length})`,
+                            { current: allCompleted, total: offsets.length }
+                        );
+                        return { response: res.response, attempts: res.attempts };
+                    }
+                );
+
+                for (const r of results) {
+                    const response = r?.response;
+                    if (!response || !response.result || !response.result.entities) continue;
+
+                    const runs = response.result.entities;
+                    if (!Array.isArray(runs) || runs.length === 0) continue;
+
+                    const filteredRuns = runs.filter(run => !!run.external_issue);
+                    allTestRuns.push(...filteredRuns);
+                }
+
+                return allTestRuns;
 
             } catch (error) {
                 console.error('Error fetching test runs:', error);
+                return allTestRuns;
             }
-
-            return allTestRuns;
         },
 
         verifyConnectToQase: async function () {
@@ -1390,8 +1782,7 @@ const AviatorShared = {
 
             let { issueKey } = AviatorShared.configuration.getJiraIssueDetails()
             if (!issueKey) {
-                AviatorShared.showMessagePopup('Could not detect Jira issue ID in URL for association.', 'error');
-                return;
+                return { status: 'skipped', issueKey: null, message: 'No Jira issue detected in URL.' };
             }
 
             AviatorShared.showLoading('Associating test run with Jira...');
@@ -1411,10 +1802,12 @@ const AviatorShared = {
                 })
 
                 AviatorShared.hideLoading();
+                return { status: 'linked', issueKey, message: `Linked to Jira issue ${issueKey}` };
             }
             catch (e) {
                 AviatorShared.hideLoading();
                 console.error('Error associating Jira issue:', e);
+                return { status: 'failed', issueKey, message: `Warning: Could not associate with Jira issue ${issueKey}` };
             }
         },
     },
@@ -1451,25 +1844,51 @@ const AviatorShared = {
                 method: 'GET',
                 url: `https://ci.paylocity.com/authenticationTest.html?csrf`,
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Accept': 'text/plain',
                     'Authorization': `Bearer ${token}`
-                }
+                },
+                // Ensure the CSRF token and any session cookie (if used) stay consistent
+                withCredentials: true
             })
 
-            return data
+            if (typeof data === 'string') return data.trim();
+            return String(data ?? '').trim();
         },
 
         /** trigger selected teamcity builds */
-        triggerTeamCityBuilds: async function (runId, caseIds) {
+        triggerTeamCityBuilds: async function (runId, caseIds, options = {}) {
+
+            const { summary = null, closeParentPopup = false } = options;
 
             const token = window.aviator?.teamcity?.token;
-            const cfsrToken = await AviatorShared.teamcity.getTeamCityCsrfToken(token)
             const builds = AviatorShared.shadowRoot.querySelectorAll('.teamcity-build:checked');
 
-            for (let b of builds) {
+            // Fetch CSRF token at most once per trigger invocation to keep it aligned
+            // with the session cookie (avoids mismatches when multiple builds trigger in parallel).
+            let csrfTokenPromise = null;
+            const getCsrfTokenOnce = async () => {
+                if (!csrfTokenPromise) csrfTokenPromise = AviatorShared.teamcity.getTeamCityCsrfToken(token);
+                return await csrfTokenPromise;
+            };
+
+            if (builds.length === 0) {
+                // No builds to trigger — still show success state if provided
+                if (summary) {
+                    AviatorShared.showStatusModal([], { summary, closeParentPopup });
+                }
+                return; // No builds to trigger
+            }
+
+            // Show TeamCity build status modal
+            AviatorShared.showStatusModal(builds, { summary, closeParentPopup });
+
+            // Trigger all builds in parallel to avoid one slow/failed build affecting others
+            const buildPromises = Array.from(builds).map(async (b) => {
                 const buildId = b.dataset.id;
 
                 try {
+                    // Update build status to "triggering"
+                    AviatorShared.teamcity.updateBuildStatus(buildId, 'triggering', 'Triggering build...');
 
                     /** set to trigger a build against a runid and do not complete it */
                     let tc_properties = [
@@ -1496,39 +1915,121 @@ const AviatorShared = {
                     /** optional to set parameter of qase_ids for automation to only run against those (if grep set) */
                     if (AviatorShared.shadowRoot.getElementById('teamcity-qases-only').checked) tc_properties.push({ name: "env.QASE_IDS", value: caseIds.join(',') })
 
-                    await AviatorShared.api({
-                        method: 'POST',
-                        url: `https://ci.paylocity.com/app/rest/buildQueue`,
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'X-TC-CSRF-Token': cfsrToken
-
-                        },
-                        data: {
-                            buildType: { id: buildId },
-                            properties: {
-                                property: tc_properties
+                    const tryTrigger = async (opts = {}) => {
+                        return await AviatorShared.api({
+                            method: 'POST',
+                            url: `https://ci.paylocity.com/app/rest/buildQueue`,
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                ...(opts.csrfToken ? { 'X-TC-CSRF-Token': opts.csrfToken } : {})
+                            },
+                            includeHttpInfo: true,
+                            withCredentials: Boolean(opts.withCredentials),
+                            anonymous: Boolean(opts.anonymous),
+                            data: {
+                                buildType: { id: buildId },
+                                properties: {
+                                    property: tc_properties
+                                }
                             }
+                        })
+                    };
+
+                    // Prefer Bearer-only POST (matches the working API spec style).
+                    // If TeamCity rejects with a CSRF error, retry once with CSRF token + credentials.
+                    // Prefer a stateless Bearer-only call with no TeamCity cookies (matches Playwright API usage).
+                    let response = await tryTrigger({ withCredentials: false, anonymous: true });
+                    const status = response?.http?.status;
+                    if (status === 403) {
+                        const details = (typeof response?.data === 'string')
+                            ? response.data
+                            : JSON.stringify(response?.data);
+                        if (/CSRF|X-TC-CSRF-Token/i.test(details || '')) {
+                            const csrfToken = await getCsrfTokenOnce();
+                            // Retry with credentials + CSRF header (must keep cookie + token in sync).
+                            response = await tryTrigger({ withCredentials: true, anonymous: false, csrfToken });
                         }
-                    })
+                    }
 
-                    console.log(`[TeamCity] Build triggered: ${buildId}`);
+                    const finalStatus = response?.http?.status;
+                    if (typeof finalStatus === 'number' && (finalStatus < 200 || finalStatus >= 300)) {
+                        const details = (typeof response?.data === 'string')
+                            ? response.data
+                            : JSON.stringify(response?.data);
+                        throw new Error(`${finalStatus} ${response?.http?.statusText || 'HTTP Error'}${details ? `: ${details}` : ''}`);
+                    }
 
-                }
-                catch (err) {
+                    console.log(`[TeamCity] Build triggered: ${buildId}`, response?.data ?? response);
+                    
+                    // Update build status to "success"
+                    const buildUrl = `https://ci.paylocity.com/buildConfiguration/${buildId}?mode=builds`;
+                    AviatorShared.teamcity.updateBuildStatus(buildId, 'success', `Build triggered successfully!`, buildUrl);
+
+                    return { buildId, status: 'success' };
+
+                } catch (err) {
                     console.error(`[TeamCity] Build trigger failed: ${buildId}`, err)
+                    
+                    // Update build status to "failed"
+                    const errorMessage = err.message || 'Unknown error occurred';
+                    AviatorShared.teamcity.updateBuildStatus(buildId, 'failed', `Failed to trigger build: ${errorMessage}`);
+
+                    return { buildId, status: 'failed', error: errorMessage };
                 }
-            };
+            });
+
+            // Wait for all builds to complete
+            try {
+                const results = await Promise.allSettled(buildPromises);
+                console.log('[TeamCity] All build triggers completed:', results);
+            } catch (error) {
+                console.error('[TeamCity] Error waiting for build triggers:', error);
+            }
+        },
+
+        updateBuildStatus: function (buildId, status, message, buildUrl = null) {
+            const statusRow = AviatorShared.shadowRoot?.querySelector(`#build-status-${buildId}`);
+            if (!statusRow) return;
+
+            const statusIcon = statusRow.querySelector('.status-icon');
+            const statusMessage = statusRow.querySelector('.status-message');
+
+            let icon, color;
+            switch (status) {
+                case 'triggering':
+                    icon = '<div style="width: 16px; height: 16px; border: 2px solid #ccc; border-top: 2px solid #0052CC; border-radius: 50%; animation: qase-spin 1s linear infinite;"></div>';
+                    color = '#0052CC';
+                    break;
+                case 'success':
+                    icon = '✅';
+                    color = '#4CAF50';
+                    break;
+                case 'failed':
+                    icon = '❌';
+                    color = '#f44336';
+                    break;
+                default:
+                    icon = '⏳';
+                    color = '#666';
+            }
+
+            statusIcon.innerHTML = icon;
+            statusMessage.textContent = message;
+            statusMessage.style.color = color;
+
+            // Add build URL link if provided and status is success
+            if (buildUrl && status === 'success') {
+                const buildName = statusRow.querySelector('.build-name');
+                buildName.innerHTML = `<a href="${buildUrl}" target="_blank" style="color: var(--primary); text-decoration: none;">${buildName.textContent}</a>`;
+            }
         },
 
         fetchTeamCityBuildDetails: async function (buildId) {
             const token = window.aviator?.teamcity?.token;
-            const cfsrToken = await AviatorShared.teamcity.getTeamCityCsrfToken(token)
-
             const data = await AviatorShared.api({
                 method: 'GET',
                 url: `https://ci.paylocity.com/app/rest/buildTypes/id:${buildId}?fields=id,projectId,name,projectName,webUrl,description`,
-                headers: { Authorization: `Bearer ${token}`, 'X-TC-CSRF-Token': cfsrToken }
+                headers: { Authorization: `Bearer ${token}`, 'Accept': 'application/json' }
             })
             return data
         },
@@ -1541,7 +2042,6 @@ const AviatorShared = {
             visited.add(projectId);
 
             const token = window.aviator?.teamcity?.token;
-            const cfsrToken = await AviatorShared.teamcity.getTeamCityCsrfToken(token);
 
             const result = { builds: [], projects: [] };
 
@@ -1550,7 +2050,7 @@ const AviatorShared = {
                 const projectData = await AviatorShared.api({
                     method: 'GET',
                     url: `https://ci.paylocity.com/app/rest/projects/id:${projectId}`,
-                    headers: { Authorization: `Bearer ${token}`, 'X-TC-CSRF-Token': cfsrToken }
+                    headers: { Authorization: `Bearer ${token}`, 'Accept': 'application/json' }
                 });
 
                 const currentPath = parentPath ? `${parentPath} > ${projectData.name}` : projectData.name;
@@ -1761,7 +2261,7 @@ const AviatorShared = {
                 } else if (existingBtn) {
                     observer.disconnect();
                 } else if (!jiraCreateButton) {
-                    console.log('⚠️ Jira create button not found');
+                    console.log('Jira create button not found');
                 }
             });
 
