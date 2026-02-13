@@ -1,6 +1,6 @@
 ﻿// ==================================================
 // Aviator - Combined Build
-// Generated on 2026-02-10 11:14:17
+// Generated on 2026-02-13 12:19:45
 // This file replaces the module loader with combined code
 // ==================================================
 
@@ -650,13 +650,67 @@ const AviatorShared = {
         });
     },
 
+    validation: {
+        setupRunTitleValidation: function (options = {}) {
+            const {
+                root = AviatorShared.shadowRoot || document,
+                minLength = 5
+            } = options;
+
+            const scope = root || document;
+            const runTitleInput = scope.querySelector('#qaseRunTitle');
+            if (!runTitleInput) {
+                return { validate: () => true, input: null, errorEl: null };
+            }
+
+            let errorEl = scope.querySelector('#qaseRunTitleError');
+            if (!errorEl) {
+                errorEl = document.createElement('div');
+                errorEl.id = 'qaseRunTitleError';
+                errorEl.style.color = 'red';
+                errorEl.style.fontSize = '0.85rem';
+                errorEl.style.marginTop = '-4px';
+                errorEl.style.marginBottom = '8px';
+                errorEl.style.display = 'none';
+                runTitleInput.insertAdjacentElement('afterend', errorEl);
+            }
+
+            const validateRunTitle = () => {
+                const value = runTitleInput.value.trim();
+                if (!value) {
+                    errorEl.textContent = 'Run title is required.';
+                    errorEl.style.display = 'block';
+                    return false;
+                }
+                if (value.length < minLength) {
+                    errorEl.textContent = `Run title must be at least ${minLength} characters.`;
+                    errorEl.style.display = 'block';
+                    return false;
+                }
+
+                errorEl.style.display = 'none';
+                return true;
+            };
+
+            if (!runTitleInput.dataset.runTitleValidationBound) {
+                runTitleInput.addEventListener('input', validateRunTitle);
+                runTitleInput.dataset.runTitleValidationBound = 'true';
+            }
+
+            return { validate: validateRunTitle, input: runTitleInput, errorEl };
+        }
+    },
+
     configuration: {
         getQaseApiToken: () => window?.aviator?.qase?.token ?? null,
 
         checkQaseApiToken: function () {
             const token = AviatorShared.configuration.getQaseApiToken();
             if (!token) {
-                AviatorShared.showMessagePopup('No Qase API token set.', 'warning', AviatorShared.hidePopup)
+                AviatorShared.showStatusModal([], {
+                    notification: { message: 'No Qase API token set.', type: 'warning' },
+                    onClose: AviatorShared.hidePopup
+                });
                 return false;
             }
             return true;
@@ -667,7 +721,10 @@ const AviatorShared = {
         checkQaseProjectCode: function () {
             const code = AviatorShared.configuration.getQaseProjectCode();
             if (!code) {
-                AviatorShared.showMessagePopup('No Qase Project Code set.', 'warning', AviatorShared.hidePopup)
+                AviatorShared.showStatusModal([], {
+                    notification: { message: 'No Qase Project Code set.', type: 'warning' },
+                    onClose: AviatorShared.hidePopup
+                });
                 return false;
             }
             return true;
@@ -704,101 +761,230 @@ const AviatorShared = {
 
     shouldClosePopup: () => AviatorShared.shadowRoot?.getElementById('keep-open')?.checked !== true,
 
-    showMessagePopup: function (message, type, onClose) {
+    showStatusModal: function (builds, options = {}) {
+        const { summary = null, notification = null, closeParentPopup = false, onClose = null } = options;
 
-        AviatorShared.createShadowRootOverlay()
+        const buildsArray = builds ? Array.from(builds) : [];
+        const buildCount = buildsArray.length;
+        const hasSummary = Boolean(summary);
+        const hasNotification = Boolean(notification);
 
-        // Remove any existing message overlays first
-        const existingMessageOverlay = AviatorShared.shadowRoot.querySelector('.qase-message-overlay');
-        if (existingMessageOverlay) {
-            existingMessageOverlay.remove();
+        // Ensure shadow root exists
+        if (!AviatorShared.shadowRoot) {
+            AviatorShared.createShadowRootOverlay();
         }
 
-        // Create overlay using centralized utility
-        const overlay = AviatorShared.createOverlay({
-            position: 'absolute',
-            className: 'qase-message-overlay',
-            zIndex: '9999'
-        });
-
-        // modal box
-        const box = document.createElement("div");
-        box.classList = 'qasePopup'
-        box.id = 'messagePopup'
-
-        Object.assign(box.style, {
-            padding: "20px 24px",
-            borderRadius: "10px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-            /* size behavior */
-            minWidth: "250px",   // won’t shrink below this
-            maxWidth: "600px",   // won’t grow beyond this
-            width: "auto",       // lets it size based on content
-            boxSizing: "border-box",
-            /* layout */
-            display: "flex",
-            flexDirection: "column",   // stack title, text, button
-            justifyContent: "center",
-            alignItems: "center",
-        });
-
-
-        // Determine title and button text based on message content
-        const isSuccess = type.toLowerCase() == 'success'
-        const isWarning = type.toLowerCase() == 'warning'
-
-        let title, buttonText;
-        if (isSuccess) {
-            title = 'Success';
-            buttonText = 'Great!';
-        } else if (isWarning) {
-            title = 'Warning';
-            buttonText = 'Got it';
-        } else {
-            title = 'Oops';
-            buttonText = 'Got it';
+        // Remove any existing status modal
+        const existingModal = AviatorShared.shadowRoot.querySelector('#status-modal');
+        if (existingModal) {
+            existingModal.remove();
         }
 
-        box.innerHTML = `
-            <h2 style="margin-top:0">${title}</h2>
-            <div style="font-size:14px; line-height:1.5; text-align: center;">${message}</div>
-            <button id="popup-ok" class="btn primary" style="margin-top: 10px">${buttonText}</button>
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'teamcity-build-status-overlay';
+        Object.assign(overlay.style, {
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: '100%',
+            height: '100%',
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: '999998',
+            fontFamily: '"Segoe UI", Arial, sans-serif'
+        });
+
+        // Create modal box
+        const modal = document.createElement('div');
+        modal.id = 'status-modal';
+        modal.className = 'qasePopup';
+        Object.assign(modal.style, {
+            width: '90%',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column'
+        });
+
+        // Header
+        const header = document.createElement('div');
+        const headerTitle = hasSummary
+            ? 'Test Run'
+            : hasNotification
+                ? (notification.title || ((notification.type || '').toLowerCase() === 'error' ? '❌ Error' : ((notification.type || '').toLowerCase() === 'warning' ? '⚠️ Warning' : 'ℹ️ Notice')))
+                : '🚀 TeamCity Build Status';
+
+        header.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h2 id="status-modal-title" style="margin: 0; color: var(--text);">${headerTitle}</h2>
+                    <button id="close-build-status-modal" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text);">&times;</button>
+                </div>
             `;
 
-        /*  */
+        // Body container to hold success + builds
+        const body = document.createElement('div');
+        body.style.display = 'flex';
+        body.style.flexDirection = 'column';
+        body.style.gap = '12px';
+        body.style.overflowY = 'auto';
+        body.style.maxHeight = '60vh';
+        body.style.padding = '4px';
 
-        overlay.appendChild(box);
+        // Success summary block (optional)
+        if (hasSummary) {
+            const successBlock = document.createElement('div');
+            successBlock.id = 'teamcity-run-success';
+            successBlock.style.cssText = `
+                    padding: 12px;
+                    border: 1px solid var(--border);
+                    border-radius: 8px;
+                    background: var(--bg-card);
+                `;
+
+            const caseLine = typeof summary.caseCount === 'number'
+                ? `${summary.caseCount} case${summary.caseCount === 1 ? '' : 's'}`
+                : null;
+
+            const metaParts = [];
+            if (summary.runId) metaParts.push(`Run ID: ${summary.runId}`);
+            if (caseLine) metaParts.push(caseLine);
+
+            const metaLine = metaParts.length ? metaParts.join(' • ') : '';
+
+            successBlock.innerHTML = `
+                    <div style="display: flex; align-items: flex-start; gap: 10px;">
+                        <div style="font-size: 22px;">✅</div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--text); margin-bottom: 4px;">Created successfully</div>
+                            ${summary.title ? `<div id="status-modal-summary-title" style="color: var(--text); margin-bottom: 4px; word-break: break-word;">${summary.title}</div>` : ''}
+                            ${metaLine ? `<div id="status-modal-summary-subline" style="color: var(--text-muted); font-size: 0.9rem;">${metaLine}</div>` : ''}
+                            ${summary.associationMessage ? `<div id="status-modal-summary-association" style="margin-top: 6px; color: ${summary.associationStatus === 'failed' ? '#f44336' : 'var(--text)'}; font-size: 0.9rem;">${summary.associationMessage}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+
+            body.appendChild(successBlock);
+        }
+
+        // Generic notification block (optional)
+        if (hasNotification) {
+            const note = notification || {};
+
+            const notificationBlock = document.createElement('div');
+            notificationBlock.id = 'status-modal-generic-notification';
+            notificationBlock.style.cssText = `
+                    padding: 12px;
+                    border: 1px solid var(--border);
+                    border-radius: 8px;
+                    background: var(--bg-card);
+                `;
+
+            notificationBlock.innerHTML = `
+                    <div style="display: flex; align-items: flex-start; gap: 10px;">
+                        <div style="flex: 1;">
+                            ${note.title ? `<div id="status-modal-title" style=\"font-weight: 600; color: var(--text); margin-bottom: 4px;\">${note.title}</div>` : ''}
+                            ${note.message ? `<div id="status-modal-message" style=\"color: var(--text); margin-bottom: 4px; word-break: break-word;\">${note.message}</div>` : ''}
+                            ${note.detail ? `<div id="status-modal-detail" style=\"color: var(--text-muted); font-size: 0.9rem;\">${note.detail}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+
+            body.appendChild(notificationBlock);
+        }
+
+        // Build status list (only when builds exist)
+        if (buildCount > 0) {
+            const listHeader = document.createElement('div');
+            listHeader.style.cssText = 'font-weight: 600; color: var(--text);';
+            listHeader.textContent = 'TeamCity builds';
+            body.appendChild(listHeader);
+
+            const statusList = document.createElement('div');
+            statusList.id = 'build-status-list';
+            Object.assign(statusList.style, {
+                maxHeight: '320px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                padding: '4px'
+            });
+
+            // Create status rows for each build
+            buildsArray.forEach(buildElement => {
+                const buildId = buildElement.dataset.id;
+                const buildName = (buildElement.parentElement.textContent || '')
+                    .replace(/\s+/g, ' ')
+                    .trim() || buildId;
+
+                const statusRow = document.createElement('div');
+                statusRow.id = `build-status-${buildId}`;
+                statusRow.style.cssText = `
+                        display: flex;
+                        align-items: flex-start;
+                        padding: 12px;
+                        border: 1px solid var(--border);
+                        border-radius: 6px;
+                        background: var(--bg-card);
+                        gap: 12px;
+                    `;
+
+                statusRow.innerHTML = `
+                        <div class="status-icon" style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">
+                            <div style="width: 16px; height: 16px; border: 2px solid #ccc; border-top: 2px solid #0052CC; border-radius: 50%; animation: qase-spin 1s linear infinite;"></div>
+                        </div>
+                        <div style="flex: 0 1 320px; min-width: 220px; max-width: 420px;">
+                            <div class="build-name" style="font-weight: 500; color: var(--text); word-break: normal; overflow-wrap: break-word;">${buildName}</div>
+                            <div class="build-id" style="font-size: 12px; color: var(--text-muted); margin-top: 2px; overflow-wrap: anywhere; word-break: break-word;">${buildId}</div>
+                        </div>
+                        <div class="status-message" style="flex: 1 1 auto; min-width: 0; color: var(--text-muted); font-size: 13px; white-space: normal; overflow-wrap: anywhere; word-break: break-word;">Waiting...</div>
+                    `;
+
+                statusList.appendChild(statusRow);
+            });
+
+            body.appendChild(statusList);
+        }
+
+        if (buildCount === 0 && !hasSummary && !hasNotification) {
+            const emptyState = document.createElement('div');
+            emptyState.style.cssText = 'color: var(--text-muted); font-size: 0.95rem;';
+            emptyState.textContent = 'No TeamCity builds selected.';
+            body.appendChild(emptyState);
+        }
+
+        // Footer
+        const footer = document.createElement('div');
+        footer.innerHTML = `
+                <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+                    <button id="close-build-status-modal-2" class="btn secondary">Close</button>
+                </div>
+            `;
+
+        modal.appendChild(header);
+        modal.appendChild(body);
+        modal.appendChild(footer);
+
+        overlay.appendChild(modal);
         AviatorShared.shadowRoot.appendChild(overlay);
 
-        // Set up close button using centralized utility
-        AviatorShared.addEventListeners(overlay, {
-            '#popup-ok': {
-                'click': () => {
-                    overlay.remove();
-
-                    // Also remove from shadow root if still there
-                    if (AviatorShared.shadowRoot && AviatorShared.shadowRoot.contains(overlay)) {
-                        AviatorShared.shadowRoot.removeChild(overlay);
-                    }
-
-                    // Check if shadow root only contains styles (indicating no other modals are open)
-                    const shadowRootChildren = AviatorShared.shadowRoot ? Array.from(AviatorShared.shadowRoot.children) : [];
-                    const onlyStylesRemain = shadowRootChildren.length === 1 && shadowRootChildren[0].tagName === 'STYLE';
-
-                    // If only styles remain, remove the main overlay container
-                    if (onlyStylesRemain) {
-                        const mainOverlay = document.getElementById('qasePopupOverlay');
-                        if (mainOverlay) {
-                            mainOverlay.remove();
-                            AviatorShared.shadowRoot = null; // Reset shadow root reference
-                        }
-                    }
-
-                    if (typeof onClose == 'function') {
-                        onClose();
-                    }
-                }
+        const closeModal = () => {
+            overlay.remove();
+            if (closeParentPopup && AviatorShared.shouldClosePopup()) {
+                AviatorShared.hidePopup();
             }
+            if (typeof onClose === 'function') {
+                onClose();
+            }
+        };
+
+        AviatorShared.addEventListeners(overlay, {
+            '#close-build-status-modal': { 'click': closeModal },
+            '#close-build-status-modal-2': { 'click': closeModal }
         });
     },
 
@@ -1014,7 +1200,7 @@ const AviatorShared = {
         },
     },
 
-    api: async function ({ method, url, headers = {}, data = null }) {
+    api: async function ({ method, url, headers = {}, data = null, includeHttpInfo = false, withCredentials = false, anonymous = false }) {
         const tryParseJSON = (text) => {
             try {
                 return JSON.parse(text);
@@ -1027,11 +1213,26 @@ const AviatorShared = {
             const request = {
                 method,
                 url,
+                anonymous,
+                withCredentials,
                 onload: res => {
 
-                    const data = tryParseJSON(res.responseText)
-                    if (data) resolve(data)
-                    else resolve(res.responseText)
+                    const parsed = tryParseJSON(res.responseText)
+                    const payload = parsed ?? res.responseText
+
+                    if (includeHttpInfo) {
+                        resolve({
+                            data: payload,
+                            http: {
+                                status: res.status,
+                                statusText: res.statusText,
+                                responseHeaders: res.responseHeaders
+                            }
+                        });
+                        return;
+                    }
+
+                    resolve(payload)
                 },
                 onerror: err => {
                     console.log(url, err)
@@ -1102,107 +1303,64 @@ const AviatorShared = {
 
         fetchTestRunsWithPagination: async function (projectCode, startDate, jiraKeys = []) {
             const allTestRuns = [];
-            const limit = 100; // Optimal batch size for API efficiency
+            const limit = 100;
             const cutoffDate = startDate || new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-            const fromStartTime = Math.floor(cutoffDate.getTime() / 1000); // Convert to Unix timestamp
+            const fromStartTime = Math.floor(cutoffDate.getTime() / 1000);
+            const token = AviatorShared.configuration.getQaseApiToken();
+            const jiraKeysSet = new Set((jiraKeys || []).map(k => String(k).toUpperCase()));
 
-            try {
-                console.log(`Fetching test runs from ${cutoffDate.toISOString()} (timestamp: ${fromStartTime})...`);
-
-                // Get total count with date filter
-                const initialResponse = await AviatorShared.api({
-                    method: 'GET',
-                    url: `https://api.qase.io/v1/run/${projectCode}?limit=1&offset=0&from_start_time=${fromStartTime}&include=external_issue%2Ccases`,
-                    headers: { 'Token': AviatorShared.configuration.getQaseApiToken() }
-                });
-
-                if (!initialResponse.result) {
-                    return allTestRuns;
+            const extractJiraKey = (externalIssue) => {
+                if (!externalIssue || typeof externalIssue !== 'object') return null;
+                const candidates = [externalIssue.id, externalIssue.key, externalIssue.external_id, externalIssue.externalId, externalIssue.name, externalIssue.title];
+                for (const candidate of candidates) {
+                    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
                 }
-
-                const totalRuns = initialResponse.result.total;
-                console.log(`Found ${totalRuns} runs since cutoff date, fetching all data in parallel...`);
-
-                if (totalRuns === 0) {
-                    return allTestRuns;
+                if (typeof externalIssue.url === 'string') {
+                    const match = externalIssue.url.match(/\/browse\/([A-Z]+-\d+)/i);
+                    if (match) return match[1];
                 }
+                return null;
+            };
 
-                // Calculate total batches needed to get all data
-                const totalBatches = Math.ceil(totalRuns / limit);
+            const isRunForJiraKeys = (run) => {
+                if (jiraKeysSet.size === 0) return true;
+                const key = extractJiraKey(run?.external_issue);
+                if (!key) return false;
+                return jiraKeysSet.has(String(key).toUpperCase());
+            };
 
-                // Process in chunks to avoid overwhelming the API
-                const chunkSize = 25; // Process 25 requests at a time
-                const chunks = [];
+            let offset = 0;
+            let total = null;
 
-                for (let i = 0; i < totalBatches; i += chunkSize) {
-                    const chunk = [];
-                    for (let j = i; j < Math.min(i + chunkSize, totalBatches); j++) {
-                        const offset = j * limit;
-                        chunk.push({ offset, index: j });
-                    }
-                    chunks.push(chunk);
-                }
+            while (true) {
+                const url = `https://api.qase.io/v1/run/${projectCode}?limit=${limit}&offset=${offset}&from_start_time=${fromStartTime}&include=${encodeURIComponent('cases,external_issues')}`;
 
-                console.log(`Processing ${totalBatches} batches in ${chunks.length} chunks of ${chunkSize}...`);
-
-                // Process each chunk sequentially, but requests within chunk in parallel
-                for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-                    const chunk = chunks[chunkIndex];
-                    console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length} (${chunk.length} requests)...`);
-
-                    // Update progress if we're tracking chunks from traceability report
-                    if (window.qaseTrackChunks && window.qaseProgressCallback) {
-                        window.qaseProgressCallback(`Fetching test runs... (chunk ${chunkIndex + 1}/${chunks.length})`, {
-                            current: chunkIndex + 1,
-                            total: chunks.length
-                        });
-                    }
-
-                    const promises = chunk.map(({ offset, index }) => {
-                        const url = `https://api.qase.io/v1/run/${projectCode}?limit=${limit}&offset=${offset}&from_start_time=${fromStartTime}&include=external_issue%2Ccases`;
-
-                        return AviatorShared.api({
-                            method: 'GET',
-                            url: url,
-                            headers: { 'Token': AviatorShared.configuration.getQaseApiToken() }
-                        }).then(response => ({ response, offset, index }))
-                            .catch(error => {
-                                console.warn(`Failed to fetch runs at offset ${offset}:`, error);
-                                return { response: null, offset, index };
-                            });
+                try {
+                    const response = await AviatorShared.api({
+                        method: 'GET',
+                        url,
+                        headers: { 'Token': token }
                     });
 
-                    const chunkResults = await Promise.all(promises);
+                    const entities = response?.result?.entities;
+                    const runs = Array.isArray(entities) ? entities : [];
+                    const filteredRuns = runs.filter(run => isRunForJiraKeys(run));
 
-                    // Sort by index to maintain order and process results
-                    chunkResults.sort((a, b) => a.index - b.index);
+                    allTestRuns.push(...filteredRuns);
 
-                    for (const { response, offset, index } of chunkResults) {
-                        if (!response || !response.result || !response.result.entities) continue;
+                    const totalRuns = typeof response?.result?.total === 'number'
+                        ? response.result.total
+                        : (typeof response?.result?.count === 'number' ? response.result.count : null);
+                    if (totalRuns !== null) total = totalRuns;
 
-                        const runs = response.result.entities;
-                        if (runs.length === 0) continue;
-
-                        // Filter only runs with external issues (date already filtered by API)
-                        const filteredRuns = runs.filter(run => {
-                            if (!run.external_issue || !run.external_issue.id) return false;
-
-                            // If jiraKeys are provided, only include runs for those specific keys
-                            if (jiraKeys.length === 0 || jiraKeys.includes(run.external_issue.id)) {
-                                return true;
-                            }
-
-                            return false;
-                        });
-
-                        allTestRuns.push(...filteredRuns);
-                    }
+                    offset += limit;
+                    const reachedTotal = total !== null && offset >= total;
+                    const noMorePages = runs.length < limit;
+                    if (reachedTotal || noMorePages) break;
+                } catch (error) {
+                    console.error('Error fetching test runs:', error);
+                    break;
                 }
-
-                console.log(`Collected ${allTestRuns.length} test runs with external issues`);
-
-            } catch (error) {
-                console.error('Error fetching test runs:', error);
             }
 
             return allTestRuns;
@@ -1402,8 +1560,7 @@ const AviatorShared = {
 
             let { issueKey } = AviatorShared.configuration.getJiraIssueDetails()
             if (!issueKey) {
-                AviatorShared.showMessagePopup('Could not detect Jira issue ID in URL for association.', 'error');
-                return;
+                return { status: 'skipped', issueKey: null, message: 'No Jira issue detected in URL.' };
             }
 
             AviatorShared.showLoading('Associating test run with Jira...');
@@ -1423,10 +1580,12 @@ const AviatorShared = {
                 })
 
                 AviatorShared.hideLoading();
+                return { status: 'linked', issueKey, message: `Linked to Jira issue ${issueKey}` };
             }
             catch (e) {
                 AviatorShared.hideLoading();
                 console.error('Error associating Jira issue:', e);
+                return { status: 'failed', issueKey, message: `Warning: Could not associate with Jira issue ${issueKey}` };
             }
         },
     },
@@ -1463,25 +1622,51 @@ const AviatorShared = {
                 method: 'GET',
                 url: `https://ci.paylocity.com/authenticationTest.html?csrf`,
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Accept': 'text/plain',
                     'Authorization': `Bearer ${token}`
-                }
+                },
+                // Ensure the CSRF token and any session cookie (if used) stay consistent
+                withCredentials: true
             })
 
-            return data
+            if (typeof data === 'string') return data.trim();
+            return String(data ?? '').trim();
         },
 
         /** trigger selected teamcity builds */
-        triggerTeamCityBuilds: async function (runId, caseIds) {
+        triggerTeamCityBuilds: async function (runId, caseIds, options = {}) {
+
+            const { summary = null, closeParentPopup = false } = options;
 
             const token = window.aviator?.teamcity?.token;
-            const cfsrToken = await AviatorShared.teamcity.getTeamCityCsrfToken(token)
             const builds = AviatorShared.shadowRoot.querySelectorAll('.teamcity-build:checked');
 
-            for (let b of builds) {
+            // Fetch CSRF token at most once per trigger invocation to keep it aligned
+            // with the session cookie (avoids mismatches when multiple builds trigger in parallel).
+            let csrfTokenPromise = null;
+            const getCsrfTokenOnce = async () => {
+                if (!csrfTokenPromise) csrfTokenPromise = AviatorShared.teamcity.getTeamCityCsrfToken(token);
+                return await csrfTokenPromise;
+            };
+
+            if (builds.length === 0) {
+                // No builds to trigger — still show success state if provided
+                if (summary) {
+                    AviatorShared.showStatusModal([], { summary, closeParentPopup });
+                }
+                return; // No builds to trigger
+            }
+
+            // Show TeamCity build status modal
+            AviatorShared.showStatusModal(builds, { summary, closeParentPopup });
+
+            // Trigger all builds in parallel to avoid one slow/failed build affecting others
+            const buildPromises = Array.from(builds).map(async (b) => {
                 const buildId = b.dataset.id;
 
                 try {
+                    // Update build status to "triggering"
+                    AviatorShared.teamcity.updateBuildStatus(buildId, 'triggering', 'Triggering build...');
 
                     /** set to trigger a build against a runid and do not complete it */
                     let tc_properties = [
@@ -1508,39 +1693,121 @@ const AviatorShared = {
                     /** optional to set parameter of qase_ids for automation to only run against those (if grep set) */
                     if (AviatorShared.shadowRoot.getElementById('teamcity-qases-only').checked) tc_properties.push({ name: "env.QASE_IDS", value: caseIds.join(',') })
 
-                    await AviatorShared.api({
-                        method: 'POST',
-                        url: `https://ci.paylocity.com/app/rest/buildQueue`,
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'X-TC-CSRF-Token': cfsrToken
-
-                        },
-                        data: {
-                            buildType: { id: buildId },
-                            properties: {
-                                property: tc_properties
+                    const tryTrigger = async (opts = {}) => {
+                        return await AviatorShared.api({
+                            method: 'POST',
+                            url: `https://ci.paylocity.com/app/rest/buildQueue`,
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                ...(opts.csrfToken ? { 'X-TC-CSRF-Token': opts.csrfToken } : {})
+                            },
+                            includeHttpInfo: true,
+                            withCredentials: Boolean(opts.withCredentials),
+                            anonymous: Boolean(opts.anonymous),
+                            data: {
+                                buildType: { id: buildId },
+                                properties: {
+                                    property: tc_properties
+                                }
                             }
+                        })
+                    };
+
+                    // Prefer Bearer-only POST (matches the working API spec style).
+                    // If TeamCity rejects with a CSRF error, retry once with CSRF token + credentials.
+                    // Prefer a stateless Bearer-only call with no TeamCity cookies (matches Playwright API usage).
+                    let response = await tryTrigger({ withCredentials: false, anonymous: true });
+                    const status = response?.http?.status;
+                    if (status === 403) {
+                        const details = (typeof response?.data === 'string')
+                            ? response.data
+                            : JSON.stringify(response?.data);
+                        if (/CSRF|X-TC-CSRF-Token/i.test(details || '')) {
+                            const csrfToken = await getCsrfTokenOnce();
+                            // Retry with credentials + CSRF header (must keep cookie + token in sync).
+                            response = await tryTrigger({ withCredentials: true, anonymous: false, csrfToken });
                         }
-                    })
+                    }
 
-                    console.log(`[TeamCity] Build triggered: ${buildId}`);
+                    const finalStatus = response?.http?.status;
+                    if (typeof finalStatus === 'number' && (finalStatus < 200 || finalStatus >= 300)) {
+                        const details = (typeof response?.data === 'string')
+                            ? response.data
+                            : JSON.stringify(response?.data);
+                        throw new Error(`${finalStatus} ${response?.http?.statusText || 'HTTP Error'}${details ? `: ${details}` : ''}`);
+                    }
 
-                }
-                catch (err) {
+                    console.log(`[TeamCity] Build triggered: ${buildId}`, response?.data ?? response);
+                    
+                    // Update build status to "success"
+                    const buildUrl = `https://ci.paylocity.com/buildConfiguration/${buildId}?mode=builds`;
+                    AviatorShared.teamcity.updateBuildStatus(buildId, 'success', `Build triggered successfully!`, buildUrl);
+
+                    return { buildId, status: 'success' };
+
+                } catch (err) {
                     console.error(`[TeamCity] Build trigger failed: ${buildId}`, err)
+                    
+                    // Update build status to "failed"
+                    const errorMessage = err.message || 'Unknown error occurred';
+                    AviatorShared.teamcity.updateBuildStatus(buildId, 'failed', `Failed to trigger build: ${errorMessage}`);
+
+                    return { buildId, status: 'failed', error: errorMessage };
                 }
-            };
+            });
+
+            // Wait for all builds to complete
+            try {
+                const results = await Promise.allSettled(buildPromises);
+                console.log('[TeamCity] All build triggers completed:', results);
+            } catch (error) {
+                console.error('[TeamCity] Error waiting for build triggers:', error);
+            }
+        },
+
+        updateBuildStatus: function (buildId, status, message, buildUrl = null) {
+            const statusRow = AviatorShared.shadowRoot?.querySelector(`#build-status-${buildId}`);
+            if (!statusRow) return;
+
+            const statusIcon = statusRow.querySelector('.status-icon');
+            const statusMessage = statusRow.querySelector('.status-message');
+
+            let icon, color;
+            switch (status) {
+                case 'triggering':
+                    icon = '<div style="width: 16px; height: 16px; border: 2px solid #ccc; border-top: 2px solid #0052CC; border-radius: 50%; animation: qase-spin 1s linear infinite;"></div>';
+                    color = '#0052CC';
+                    break;
+                case 'success':
+                    icon = '✅';
+                    color = '#4CAF50';
+                    break;
+                case 'failed':
+                    icon = '❌';
+                    color = '#f44336';
+                    break;
+                default:
+                    icon = '⏳';
+                    color = '#666';
+            }
+
+            statusIcon.innerHTML = icon;
+            statusMessage.textContent = message;
+            statusMessage.style.color = color;
+
+            // Add build URL link if provided and status is success
+            if (buildUrl && status === 'success') {
+                const buildName = statusRow.querySelector('.build-name');
+                buildName.innerHTML = `<a href="${buildUrl}" target="_blank" style="color: var(--primary); text-decoration: none;">${buildName.textContent}</a>`;
+            }
         },
 
         fetchTeamCityBuildDetails: async function (buildId) {
             const token = window.aviator?.teamcity?.token;
-            const cfsrToken = await AviatorShared.teamcity.getTeamCityCsrfToken(token)
-
             const data = await AviatorShared.api({
                 method: 'GET',
                 url: `https://ci.paylocity.com/app/rest/buildTypes/id:${buildId}?fields=id,projectId,name,projectName,webUrl,description`,
-                headers: { Authorization: `Bearer ${token}`, 'X-TC-CSRF-Token': cfsrToken }
+                headers: { Authorization: `Bearer ${token}`, 'Accept': 'application/json' }
             })
             return data
         },
@@ -1553,7 +1820,6 @@ const AviatorShared = {
             visited.add(projectId);
 
             const token = window.aviator?.teamcity?.token;
-            const cfsrToken = await AviatorShared.teamcity.getTeamCityCsrfToken(token);
 
             const result = { builds: [], projects: [] };
 
@@ -1562,7 +1828,7 @@ const AviatorShared = {
                 const projectData = await AviatorShared.api({
                     method: 'GET',
                     url: `https://ci.paylocity.com/app/rest/projects/id:${projectId}`,
-                    headers: { Authorization: `Bearer ${token}`, 'X-TC-CSRF-Token': cfsrToken }
+                    headers: { Authorization: `Bearer ${token}`, 'Accept': 'application/json' }
                 });
 
                 const currentPath = parentPath ? `${parentPath} > ${projectData.name}` : projectData.name;
@@ -1773,7 +2039,7 @@ const AviatorShared = {
                 } else if (existingBtn) {
                     observer.disconnect();
                 } else if (!jiraCreateButton) {
-                    console.log('⚠️ Jira create button not found');
+                    console.log('Jira create button not found');
                 }
             });
 
@@ -2327,197 +2593,7 @@ const AviatorShared = {
 // Aviator Workflow v1.0.0
 
 const Aviator = {
-    version: '1.5.0',
-
-    getFormRunData: function () {
-        const environment = AviatorShared.shadowRoot.getElementById('qaseEnv')
-        const milestone = AviatorShared.shadowRoot.getElementById('qaseMilestone')
-
-        const environmentId = environment?.value || null;
-        const enviromentText = environment?.options[environment.selectedIndex].text || null
-        const milestoneId = milestone?.value || null;
-        const milestoneText = milestone?.options[milestone.selectedIndex].text || null;
-
-        const configSelections = Array.from(AviatorShared.shadowRoot.querySelectorAll('.qaseConfig'))
-            .reduce((acc, sel) => {
-                if (sel.value) acc[sel.getAttribute('data-entity-id')] = parseInt(sel.value, 10);
-                return acc;
-            }, {});
-
-        const allCaseIds = [];
-
-        // Get individual test cases (from linked test cases section)
-        const individualCases = AviatorShared.shadowRoot.querySelectorAll('.qase-item:checked[data-type="case"]');
-        individualCases.forEach(item => {
-            const dataIds = item.getAttribute('data-ids');
-            if (dataIds) {
-                const ids = dataIds.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
-                allCaseIds.push(...ids);
-            }
-        });
-
-        // Get selected test plan IDs (we'll fetch their case IDs later)
-        const selectedTestPlanIds = [];
-        const testPlanCheckboxes = AviatorShared.shadowRoot.querySelectorAll('#aviatorTestPlanOptions input[type="checkbox"]:checked');
-        testPlanCheckboxes.forEach(checkbox => {
-            const planId = parseInt(checkbox.value);
-            if (!isNaN(planId)) {
-                selectedTestPlanIds.push(planId);
-            }
-        });
-
-        // Remove duplicates from individual cases
-        const uniqueCaseIds = [...new Set(allCaseIds)];
-
-        const builds = AviatorShared.shadowRoot.querySelectorAll('.teamcity-build:checked');
-        const _builds = builds.length
-            ? Array.from(builds).map(b => b.dataset.id)
-            : [];
-
-        return {
-            title: AviatorShared.shadowRoot.getElementById('qaseRunTitle').value.trim(),
-            environment: { id: environmentId, text: enviromentText },
-            milestone: { id: milestoneId, text: milestoneText },
-            configurations: configSelections,
-            caseIds: uniqueCaseIds,
-            selectedTestPlanIds: selectedTestPlanIds,
-            tcBuilds: _builds
-        }
-    },
-
-    createQaseTestRun: async function () {
-        const projectCode = AviatorShared.configuration.getQaseProjectCode();
-        const token = AviatorShared.configuration.getQaseApiToken();
-
-        const data = Aviator.getFormRunData()
-
-        // Check if we have any selections (individual cases OR test plans)
-        if (data.caseIds.length === 0 && data.selectedTestPlanIds.length === 0) {
-            AviatorShared.showMessagePopup('No test cases or test plans selected!', 'warning');
-            return;
-        }
-
-        // Fetch case IDs from selected test plans (like traciator does)
-        let testPlanCaseIds = [];
-        if (data.selectedTestPlanIds.length > 0) {
-            try {
-                const planDetails = await Promise.all(
-                    data.selectedTestPlanIds.map(planId => AviatorShared.qase.fetchQaseTestPlanDetails(projectCode, planId))
-                );
-                testPlanCaseIds = planDetails.flatMap(plan => plan.caseIds).filter(id => id != null && !isNaN(id) && id > 0);
-                testPlanCaseIds = [...new Set(testPlanCaseIds)]; // Remove duplicates
-            } catch (error) {
-                console.warn('Error fetching test cases from selected test plans:', error);
-            }
-        }
-
-        // Combine individual cases with test plan cases
-        const allCaseIds = [...new Set([...data.caseIds, ...testPlanCaseIds])];
-
-        // Final validation after fetching test plan case IDs
-        if (allCaseIds.length === 0) {
-            AviatorShared.showMessagePopup('No test cases found in selected plans!', 'warning');
-            return;
-        }
-
-        if (!data.title) {
-            AviatorShared.showMessagePopup('No test run title entered!', 'warning');
-            return;
-        }
-
-        const payload = {
-            title: data.title,
-            cases: allCaseIds,
-            environment_id: data.environment.id,
-            milestone_id: data.milestone.id,
-            configurations: data.configurations
-        };
-
-        try {
-            const runData = await AviatorShared.api({
-                method: 'POST',
-                url: `https://api.qase.io/v1/run/${projectCode}`,
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'Token': token
-                },
-                data: payload
-            })
-
-            console.log(`Qase: Test Run Created: ${runData.result.id}`);
-
-            // Trigger any TeamCity builds
-            await AviatorShared.teamcity.triggerTeamCityBuilds(runData.result.id, allCaseIds);
-
-            // send data to slack for usage tracking
-            await AviatorShared.slack.sendResultToSlack(data)
-
-            // Associate with Jira AFTER run is confirmed created
-            await AviatorShared.qase.associateQaseTestRunWithJira(projectCode, runData.result.id);
-
-            // Create Jira comment documenting the test run creation
-            try {
-                const commentSuccess = await AviatorShared.jira.createJiraComment(projectCode, runData.result.id, data);
-                if (!commentSuccess) {
-                    console.warn('⚠️ Jira comment creation failed, but test run was created successfully');
-                }
-            } catch (commentError) {
-                console.error('⚠️ Error during Jira comment creation:', commentError);
-                // Don't fail the entire operation if comment fails
-            }
-
-            // should we close the popup or keep it open for another run?
-            if (AviatorShared.shouldClosePopup()) AviatorShared.jira.addQaseTestRunsToJiraUI()
-
-        } catch (err) {
-            console.log('Error creating test run:', err);
-            AviatorShared.showMessagePopup('Failed to create Qase test run. See console for details.', 'error');
-        }
-    },
-
-    scrapeAndShowAviator: async function () {
-        if (!AviatorShared.configuration.checkQaseApiToken() || !AviatorShared.configuration.checkQaseProjectCode()) return;
-
-        /** check qase connection to verify can show the popup */
-        if (await AviatorShared.qase.verifyConnectToQase()) {
-            AviatorShared.hideLoading();
-            AviatorShared.showMessagePopup('Error connecting to Qase. Check your token and project are correct', 'error', AviatorShared.hidePopup)
-            return;
-        }
-
-        const projectCode = AviatorShared.configuration.getQaseProjectCode();
-
-        AviatorShared.showLoading('Fetching Qase test data...');
-
-        let { issueKey } = AviatorShared.configuration.getJiraIssueDetails()
-
-        // Fetch all available test plans from Qase API instead of scraping page
-        let availableTestPlans = [];
-        try {
-            availableTestPlans = await AviatorShared.qase.fetchQaseTestPlans();
-        } catch (error) {
-            console.warn('Could not fetch available test plans:', error);
-            // Continue without test plans - user can still use external cases
-        }
-
-        // Get external test cases linked to this Jira issue
-        const externalCases = issueKey
-            ? await AviatorShared.qase.fetchQaseTestCases(projectCode, issueKey)
-            : [];
-
-        if (!availableTestPlans.length && !externalCases.length) {
-            AviatorShared.hideLoading();
-            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', 'warning', AviatorShared.hidePopup)
-            return;
-        }
-
-        const tcBuildDetails = await AviatorShared.teamcity.fetchAllTeamCityBuilds();
-        const qaseConfigData = await AviatorShared.qase.fetchQaseTestRunConfig()
-
-        AviatorShared.hideLoading();
-        Aviator.showPopup(issueKey, availableTestPlans, externalCases, qaseConfigData, tcBuildDetails);
-    },
+    version: '1.6.0',
 
     shouldShowAviatorFeaturePopup: function () {
         const seenVersion = localStorage.getItem("aviatorLastFeaturePopup") || "";
@@ -2544,7 +2620,18 @@ const Aviator = {
             <h2 style="margin-top:0">🚀 Aviator Changelog 🚀</h2>
             <div class="changelog-container">
 
-                <div class="changelog-entry featured">
+            <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.6.0</div>
+                    <div class="changelog-description">UI/UX improvements:</div>
+                    <ul class="changelog-feature-list">
+                        <li>Consolidate status message popup presentation.</li>
+                        <li>Selected Teamcity builds provide status information feedback.</li>
+                        <li>Robust Teamcity api error messaging.</li>
+                        <li>Unified Run Title validation experience.</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.5.0</div>
                     <div class="changelog-description">Major UI/UX improvements:</div>
                     <ul class="changelog-feature-list">
@@ -2625,12 +2712,251 @@ const Aviator = {
         });
     },
 
+    getFormRunData: function () {
+        const environment = AviatorShared.shadowRoot.getElementById('qaseEnv')
+        const milestone = AviatorShared.shadowRoot.getElementById('qaseMilestone')
+
+        const environmentId = environment?.value || null;
+        const enviromentText = environment?.options[environment.selectedIndex].text || null
+        const milestoneId = milestone?.value || null;
+        const milestoneText = milestone?.options[milestone.selectedIndex].text || null;
+
+        const configSelections = Array.from(AviatorShared.shadowRoot.querySelectorAll('.qaseConfig'))
+            .reduce((acc, sel) => {
+                if (sel.value) acc[sel.getAttribute('data-entity-id')] = parseInt(sel.value, 10);
+                return acc;
+            }, {});
+
+        const allCaseIds = [];
+
+        // Get individual test cases (from linked test cases section)
+        const individualCases = AviatorShared.shadowRoot.querySelectorAll('.qase-item:checked[data-type="case"]');
+        individualCases.forEach(item => {
+            const dataIds = item.getAttribute('data-ids');
+            if (dataIds) {
+                const ids = dataIds.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+                allCaseIds.push(...ids);
+            }
+        });
+
+        // Get selected test plan IDs (we'll fetch their case IDs later)
+        const selectedTestPlanIds = [];
+        const testPlanCheckboxes = AviatorShared.shadowRoot.querySelectorAll('#aviatorTestPlanOptions input[type="checkbox"]:checked');
+        testPlanCheckboxes.forEach(checkbox => {
+            const planId = parseInt(checkbox.value);
+            if (!isNaN(planId)) {
+                selectedTestPlanIds.push(planId);
+            }
+        });
+
+        // Remove duplicates from individual cases
+        const uniqueCaseIds = [...new Set(allCaseIds)];
+
+        const builds = AviatorShared.shadowRoot.querySelectorAll('.teamcity-build:checked');
+        const _builds = builds.length
+            ? Array.from(builds).map(b => b.dataset.id)
+            : [];
+
+        return {
+            title: AviatorShared.shadowRoot.getElementById('qaseRunTitle').value.trim(),
+            environment: { id: environmentId, text: enviromentText },
+            milestone: { id: milestoneId, text: milestoneText },
+            configurations: configSelections,
+            caseIds: uniqueCaseIds,
+            selectedTestPlanIds: selectedTestPlanIds,
+            tcBuilds: _builds
+        }
+    },
+
+    createQaseTestRun: async function () {
+        // Single-flight guard: if called twice (e.g., double click), reuse the in-flight promise
+        if (Aviator._createQaseTestRunPromise) return Aviator._createQaseTestRunPromise;
+        Aviator._createQaseTestRunPromise = (async () => {
+        const projectCode = AviatorShared.configuration.getQaseProjectCode();
+        const token = AviatorShared.configuration.getQaseApiToken();
+
+        const data = Aviator.getFormRunData()
+
+        // Check if we have any selections (individual cases OR test plans)
+        if (data.caseIds.length === 0 && data.selectedTestPlanIds.length === 0) {
+            AviatorShared.showStatusModal([], { notification: { message: 'No test cases or test plans selected!', type: 'warning' } });
+            return;
+        }
+
+        // Fetch case IDs from selected test plans (like traciator does)
+        let testPlanCaseIds = [];
+        if (data.selectedTestPlanIds.length > 0) {
+            try {
+                const planDetails = await Promise.all(
+                    data.selectedTestPlanIds.map(planId => AviatorShared.qase.fetchQaseTestPlanDetails(projectCode, planId))
+                );
+                testPlanCaseIds = planDetails.flatMap(plan => plan.caseIds).filter(id => id != null && !isNaN(id) && id > 0);
+                testPlanCaseIds = [...new Set(testPlanCaseIds)]; // Remove duplicates
+            } catch (error) {
+                console.warn('Error fetching test cases from selected test plans:', error);
+            }
+        }
+
+        // Combine individual cases with test plan cases
+        const allCaseIds = [...new Set([...data.caseIds, ...testPlanCaseIds])];
+
+        // Final validation after fetching test plan case IDs
+        if (allCaseIds.length === 0) {
+            AviatorShared.showStatusModal([], { notification: { message: 'No test cases found in selected plans!', type: 'warning' } });
+            return;
+        }
+
+        if (!data.title) {
+            AviatorShared.showStatusModal([], { notification: { message: 'No test run title entered!', type: 'warning' } });
+            return;
+        }
+
+        const payload = {
+            title: data.title,
+            cases: allCaseIds,
+            environment_id: data.environment.id,
+            milestone_id: data.milestone.id,
+            configurations: data.configurations
+        };
+
+        try {
+            const runData = await AviatorShared.api({
+                method: 'POST',
+                url: `https://api.qase.io/v1/run/${projectCode}`,
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Token': token
+                },
+                data: payload
+            })
+
+            console.log(`Qase: Test Run Created: ${runData.result.id}`);
+
+            // send data to slack for usage tracking
+            await AviatorShared.slack.sendResultToSlack(data)
+
+            // Prepare summary for unified status modal
+            const summary = {
+                runId: runData.result.id,
+                title: data.title,
+                caseCount: allCaseIds.length,
+                jiraKey: null,
+                associationStatus: null,
+                associationMessage: null
+            };
+
+            // Associate with Jira AFTER run is confirmed created
+            try {
+                const assoc = await AviatorShared.qase.associateQaseTestRunWithJira(projectCode, runData.result.id);
+                if (assoc) {
+                    summary.jiraKey = assoc.issueKey || summary.jiraKey;
+                    summary.associationStatus = assoc.status;
+                    summary.associationMessage = assoc.message;
+                }
+            } catch (associationError) {
+                console.warn('Jira association failed:', associationError);
+                summary.associationStatus = 'failed';
+                summary.associationMessage = 'Warning: Could not associate with Jira issue.';
+            }
+
+            // Create Jira comment documenting the test run creation
+            try {
+                const commentSuccess = await AviatorShared.jira.createJiraComment(projectCode, runData.result.id, data);
+                if (!commentSuccess) {
+                    console.warn('Jira comment creation failed, but test run was created successfully');
+                }
+            } catch (commentError) {
+                console.error('Error during Jira comment creation:', commentError);
+                // Don't fail the entire operation if comment fails
+            }
+
+            // Trigger any TeamCity builds (or show summary-only modal when none)
+            if (data.tcBuilds && data.tcBuilds.length > 0) {
+                try {
+                    await AviatorShared.teamcity.triggerTeamCityBuilds(runData.result.id, allCaseIds, { summary, closeParentPopup: true });
+                } catch (tcError) {
+                    console.warn('Failed to trigger TeamCity builds:', tcError);
+                    AviatorShared.showStatusModal([], { summary, closeParentPopup: true });
+                }
+            } else {
+                AviatorShared.showStatusModal([], { summary, closeParentPopup: true });
+            }
+
+            // should we close the popup or keep it open for another run?
+            if (AviatorShared.shouldClosePopup()) AviatorShared.jira.addQaseTestRunsToJiraUI()
+
+        } catch (err) {
+            console.log('Error creating test run:', err);
+            AviatorShared.showStatusModal([], { notification: { message: 'Failed to create Qase test run. See console for details.', type: 'error' } });
+        }
+        })();
+
+        try {
+            return await Aviator._createQaseTestRunPromise;
+        } finally {
+            Aviator._createQaseTestRunPromise = null;
+        }
+    },
+
+    scrapeAndShowAviator: async function () {
+        if (!AviatorShared.configuration.checkQaseApiToken() || !AviatorShared.configuration.checkQaseProjectCode()) return;
+
+        /** check qase connection to verify can show the popup */
+        if (await AviatorShared.qase.verifyConnectToQase()) {
+            AviatorShared.hideLoading();
+            AviatorShared.showStatusModal([], {
+                notification: { message: 'Error connecting to Qase. Check your token and project are correct', type: 'error' },
+                onClose: AviatorShared.hidePopup
+            });
+            return;
+        }
+
+        const projectCode = AviatorShared.configuration.getQaseProjectCode();
+
+        AviatorShared.showLoading('Fetching Qase test data...');
+
+        let { issueKey } = AviatorShared.configuration.getJiraIssueDetails()
+
+        // Fetch all available test plans from Qase API instead of scraping page
+        let availableTestPlans = [];
+        try {
+            availableTestPlans = await AviatorShared.qase.fetchQaseTestPlans();
+        } catch (error) {
+            console.warn('Could not fetch available test plans:', error);
+            // Continue without test plans - user can still use external cases
+        }
+
+        // Get external test cases linked to this Jira issue
+        const externalCases = issueKey
+            ? await AviatorShared.qase.fetchQaseTestCases(projectCode, issueKey)
+            : [];
+
+        if (!availableTestPlans.length && !externalCases.length) {
+            AviatorShared.hideLoading();
+            AviatorShared.showStatusModal([], {
+                notification: { message: 'No Qase Test Plans or Cases are part of this ticket', type: 'warning' },
+                onClose: AviatorShared.hidePopup
+            });
+            return;
+        }
+
+        const tcBuildDetails = await AviatorShared.teamcity.fetchAllTeamCityBuilds();
+        const qaseConfigData = await AviatorShared.qase.fetchQaseTestRunConfig()
+
+        AviatorShared.hideLoading();
+        Aviator.showPopup(issueKey, availableTestPlans, externalCases, qaseConfigData, tcBuildDetails);
+    }, 
+
     showPopup: function (issueKey, plans, externalCases, qaseConfigData, tcBuildDetails) {
         AviatorShared.hidePopup();
         AviatorShared.createdRun = false; // reset for this popup session
 
         if (!plans.length && !externalCases.length) {
-            AviatorShared.showMessagePopup('No Qase Test Plans or Cases are part of this ticket', 'warning', AviatorShared.hidePopup)
+            AviatorShared.showStatusModal([], {
+                notification: { message: 'No Qase Test Plans or Cases are part of this ticket', type: 'warning' },
+                onClose: AviatorShared.hidePopup
+            });
             return;
         }
 
@@ -2758,57 +3084,32 @@ const Aviator = {
         // block jira shortcuts
         AviatorShared.jira.blockJiraShortcuts();
 
-        const runTitleInput = AviatorShared.shadowRoot.getElementById('qaseRunTitle');
-        runTitleInput.value = AviatorShared.configuration.generateTitlePlaceholder(issueKey);
-
-        // --- live validation setup ---
-        const errorMsg = document.createElement('div');
-        errorMsg.style.color = 'red';
-        errorMsg.style.fontSize = '0.85rem';
-        errorMsg.style.marginTop = '-4px';
-        errorMsg.style.marginBottom = '8px';
-        errorMsg.style.display = 'none';
-        errorMsg.id = 'qaseRunTitleError';
-        runTitleInput.insertAdjacentElement('afterend', errorMsg);
-
-        function validateRunTitle() {
-            const value = runTitleInput.value.trim();
-            if (!value) {
-                errorMsg.textContent = 'Run title is required.';
-                errorMsg.style.display = 'block';
-                return false;
-            }
-            if (value.length < 5) {
-                errorMsg.textContent = 'Run title must be at least 5 characters.';
-                errorMsg.style.display = 'block';
-                return false;
-            }
-            // if (/[^\w\s-]/.test(value)) {
-            //     errorMsg.textContent = 'Run title contains invalid characters.';
-            //     errorMsg.style.display = 'block';
-            //     return false;
-            // }
-            errorMsg.style.display = 'none';
-            return true;
+        const { validate: validateRunTitle, input: runTitleInput } = AviatorShared.validation.setupRunTitleValidation({
+            root: AviatorShared.shadowRoot,
+            minLength: 5
+        });
+        if (runTitleInput) {
+            runTitleInput.value = AviatorShared.configuration.generateTitlePlaceholder(issueKey);
         }
 
-        // Set up input validation using centralized utility
-        AviatorShared.addEventListeners(runTitleInput.parentElement || runTitleInput, {
-            '#qaseRunTitle': { 'input': validateRunTitle }
-        });
-
-        // Handle Create Test Run click
-        AviatorShared.shadowRoot.getElementById('qaseRunBtn').onclick = async () => {
+        // Handle Create Test Run click (single-flight)
+        const qaseRunBtn = AviatorShared.shadowRoot.getElementById('qaseRunBtn');
+        let qaseRunBtnInFlight = false;
+        qaseRunBtn.onclick = async () => {
             const data = Aviator.getFormRunData();
             if (!data.caseIds.length && !data.selectedTestPlanIds.length) {
-                AviatorShared.showMessagePopup('No test cases or test plans selected!', 'warning');
+                AviatorShared.showStatusModal([], { notification: { message: 'No test cases or test plans selected!', type: 'warning' } });
                 return;
             }
 
             if (!validateRunTitle()) {
-                runTitleInput.focus();
+                if (runTitleInput) runTitleInput.focus();
                 return;
             }
+
+            if (qaseRunBtnInFlight) return;
+            qaseRunBtnInFlight = true;
+            qaseRunBtn.disabled = true;
 
             try {
                 // Show full-page loading overlay
@@ -2818,13 +3119,16 @@ const Aviator = {
                 await Aviator.createQaseTestRun();
 
                 // Close popup and loading overlay when done
-                if (AviatorShared.shouldClosePopup()) AviatorShared.hidePopup();
                 AviatorShared.hideLoading();
                 AviatorShared.createdRun = true; // flag for jira UI update
             } catch (err) {
                 console.error('Error creating test run:', err);
                 AviatorShared.hideLoading();
-                AviatorShared.showMessagePopup('Failed to create Test Run. See console for details.', 'error');
+                AviatorShared.showStatusModal([], { notification: { message: 'Failed to create Test Run. See console for details.', type: 'error' } });
+            } finally {
+                qaseRunBtnInFlight = false;
+                const stillThere = AviatorShared.shadowRoot?.getElementById('qaseRunBtn');
+                if (stillThere) stillThere.disabled = false;
             }
         };
 
@@ -2851,13 +3155,125 @@ const Aviator = {
 }
 
 
+
 // === src\traciator.js ===
 
 // traciator.js
 // Traciator Workflow v1.0.0
 
 const Traciator = {
-    version: '1.0.0',
+    version: '1.1.0',
+
+    shouldShowTraciatorFeaturePopup: function () {
+        const seenVersion = localStorage.getItem("traciatorLastFeaturePopup") || "";
+        if (seenVersion !== Traciator.version) {
+            localStorage.setItem("traciatorLastFeaturePopup", Traciator.version);
+            return true;
+        }
+        return false;
+    },
+
+    showTraciatorFeaturePopup: function () {
+        // Ensure shadow root exists
+        if (!AviatorShared.shadowRoot) {
+            AviatorShared.createShadowRootOverlay();
+        }
+
+        // overlay
+        const overlay = document.createElement("div");
+        Object.assign(overlay.style, {
+            position: "fixed",
+            top: "0",
+            left: "0",
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.65)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: "999999" // sits above everything including main modal
+        });
+
+        // modal box
+        const box = document.createElement("div");
+        box.classList = 'qasePopup'
+        box.id = 'qasePopup'
+
+        Object.assign(box.style, {
+            padding: "20px 24px",
+            borderRadius: "10px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+            /* size behavior */
+            minWidth: "250px",   // won't shrink below this
+            maxWidth: "600px",   // won't grow beyond this
+            width: "auto",       // lets it size based on content
+            boxSizing: "border-box",
+            /* layout */
+            display: "flex",
+            flexDirection: "column",   // stack title, text, button
+            justifyContent: "center",
+            alignItems: "center",
+        });
+
+        box.innerHTML = `
+            <h2 style="margin-top:0">🔍 Traciator Changelog 🔍</h2>
+            <div class="changelog-container">
+
+                <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.1.0</div>
+                    <div class="changelog-description">Performance and Feedback:</div>
+                    <ul class="changelog-feature-list">
+                        <li>Consolidate status message popup presentation.</li>
+                        <li>Selected Teamcity builds provide status information feedback.</li>
+                        <li>Robust Teamcity api error messaging.</li>
+                        <li>Unified Run Title validation experience.</li>
+                        <li>Performant GET qase/runs by 40%</li>
+                    </ul>  
+                     <div class="changelog-description">Bugs:</div>
+                    <ul class="changelog-feature-list">
+                        <li>Test run modal shows total cases from all sources.</li>
+                        <li>Selected test plans included in created test run.</li>
+                    </ul>                   
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">v1.0.0</div>
+                    <div class="changelog-description">Initial Traciator release! Generate comprehensive traceability reports from release pages.</div>
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">Core Features</div>
+                    <ul class="changelog-feature-list">
+                        <li>Visual test coverage mapping between Jira issues, test cases, and test runs</li>
+                        <li>Export detailed CSV reports for stakeholder analysis</li>
+                        <li>Create test runs directly from traceability data</li>
+                        <li>Real-time test run statistics and coverage indicators</li>
+                        <li>Smart filtering by specific Jira keys from release pages</li>
+                        <li>Distinct test case counting across multiple data sources</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">How to use</div>
+                    <div class="changelog-text">Navigate to any Jira release page and click the 🔍 Traciator button to generate your traceability report!</div>
+                </div>
+            </div>
+              <button id="traciator-feature-ok" class="btn primary" style="margin-top: 10px">Got it</button>
+            `;
+
+        overlay.appendChild(box);
+        AviatorShared.shadowRoot.appendChild(overlay);
+
+        // Set up close button using centralized utility
+        AviatorShared.addEventListeners(overlay, {
+            '#traciator-feature-ok': {
+                'click': () => {
+                    overlay.remove();
+                }
+            }
+        });
+    },
+
 
     extractVersionNameFromReleasePage: function () {
         // First try to extract from URL pattern
@@ -2977,9 +3393,68 @@ const Traciator = {
     buildTraceabilityMapping: function (testCases, testRuns, jiraData) {
         const mapping = {};
 
+        const normalizeJiraKey = (key) => {
+            if (!key) return null;
+            const str = String(key).trim();
+            if (!str) return null;
+            return str.toUpperCase();
+        };
+
+        const extractJiraKeyFromAny = (obj) => {
+            if (!obj || typeof obj !== 'object') return null;
+
+            const candidates = [
+                obj.id,
+                obj.key,
+                obj.external_id,
+                obj.externalId,
+                obj.name,
+                obj.title
+            ];
+
+            for (const candidate of candidates) {
+                const normalized = normalizeJiraKey(candidate);
+                if (normalized) return normalized;
+            }
+
+            const urlCandidates = [obj.url, obj.link, obj.self, obj.browseUrl];
+            for (const url of urlCandidates) {
+                if (typeof url !== 'string') continue;
+                const match = url.match(/\b([A-Z][A-Z0-9]+-\d+)\b/i);
+                if (match) return normalizeJiraKey(match[1]);
+            }
+
+            return null;
+        };
+
+        const getCaseIdsFromRun = (testRun) => {
+            if (!testRun || typeof testRun !== 'object') return [];
+
+            if (Array.isArray(testRun.cases)) {
+                if (testRun.cases.length === 0) return [];
+
+                // Qase may return either [123, 456] or [{case_id:123}, ...]
+                if (typeof testRun.cases[0] === 'object' && testRun.cases[0] !== null) {
+                    return testRun.cases
+                        .map(c => c.case_id || c.id)
+                        .filter(Boolean);
+                }
+
+                return testRun.cases.filter(Boolean);
+            }
+
+            if (Array.isArray(testRun.case_ids)) {
+                return testRun.case_ids.filter(Boolean);
+            }
+
+            return [];
+        };
+
         // Initialize mapping for all Jira keys
         jiraData.forEach(item => {
-            mapping[item.key] = {
+            const normalizedKey = normalizeJiraKey(item.key);
+            if (!normalizedKey) return;
+            mapping[normalizedKey] = {
                 jiraKey: item.key,
                 jiraName: item.name,
                 testCases: [],
@@ -2994,8 +3469,9 @@ const Traciator = {
                 testCase.external_issues.forEach(extIssue => {
                     if (extIssue.type === 'jira-cloud' && extIssue.issues) {
                         extIssue.issues.forEach(issue => {
-                            if (mapping[issue.id]) {
-                                mapping[issue.id].testCases.push(testCase);
+                            const jiraKey = extractJiraKeyFromAny(issue);
+                            if (jiraKey && mapping[jiraKey]) {
+                                mapping[jiraKey].testCases.push(testCase);
                             }
                         });
                     }
@@ -3005,26 +3481,24 @@ const Traciator = {
 
         // Map test runs to Jira keys
         testRuns.forEach(testRun => {
-            if (testRun.external_issue && testRun.external_issue.id) {
-                const jiraKey = testRun.external_issue.id;
-                if (mapping[jiraKey]) {
-                    // Count total cases in run vs cases linked to this Jira key
-                    const totalCasesInRun = testRun.cases ? testRun.cases.length : (testRun.stats ? testRun.stats.total : 0);
-                    const linkedCasesInRun = testRun.cases ?
-                        testRun.cases.filter(caseId =>
-                            mapping[jiraKey].testCases.some(tc => tc.id === caseId)
-                        ).length : 0;
+            const jiraKey = extractJiraKeyFromAny(testRun.external_issue);
+            if (!jiraKey || !mapping[jiraKey]) return;
 
-                    // Add additional properties to the test run for display
-                    const enhancedRun = {
-                        ...testRun,
-                        totalCasesInRun,
-                        linkedCasesInRun
-                    };
+            // Count total cases in run vs cases linked to this Jira key
+            const runCaseIds = getCaseIdsFromRun(testRun);
+            const totalCasesInRun = runCaseIds.length || (testRun.stats ? testRun.stats.total : 0);
 
-                    mapping[jiraKey].testRuns.push(enhancedRun);
-                }
-            }
+            const linkedTestCaseIds = new Set(mapping[jiraKey].testCases.map(tc => tc.id).filter(Boolean));
+            const linkedCasesInRun = runCaseIds.reduce((acc, id) => (linkedTestCaseIds.has(id) ? acc + 1 : acc), 0);
+
+            // Add additional properties to the test run for display
+            const enhancedRun = {
+                ...testRun,
+                totalCasesInRun,
+                linkedCasesInRun
+            };
+
+            mapping[jiraKey].testRuns.push(enhancedRun);
         });
 
         // Update coverage status
@@ -3062,7 +3536,10 @@ const Traciator = {
             if (jiraData.length === 0) {
                 AviatorShared.hideLoading();
                 delete window.qaseProgressCallback;
-                AviatorShared.showMessagePopup('No Jira work item keys found on this release page.', 'warning', AviatorShared.hidePopup);
+                AviatorShared.showStatusModal([], {
+                    notification: { message: 'No Jira work item keys found on this release page.', type: 'warning' },
+                    onClose: AviatorShared.hidePopup
+                });
                 return;
             }
 
@@ -3071,13 +3548,14 @@ const Traciator = {
             const jiraKeys = jiraData.map(item => item.key);
             const testCases = await AviatorShared.qase.fetchTestCasesForJiraKeys(projectCode, jiraKeys);
 
-            // Step 3: Fetch test runs from the last 2 months
+            // Step 3: Fetch test runs from the last 30 days
             AviatorShared.showLoading(`Found ${testCases.length} test cases. Preparing to fetch test runs...`, { current: 3, total: 4 });
 
             // Enable chunk progress tracking
             window.qaseTrackChunks = true;
 
-            const testRuns = await AviatorShared.qase.fetchTestRunsWithPagination(projectCode, null, jiraKeys);
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            const testRuns = await AviatorShared.qase.fetchTestRunsWithPagination(projectCode, thirtyDaysAgo, jiraKeys);
 
             // Disable chunk tracking
             window.qaseTrackChunks = false;
@@ -3118,6 +3596,7 @@ const Traciator = {
             });
 
             const totalDistinctTestCases = allDistinctTestCaseIds.size;
+            const allDistinctTestCaseIdsArray = Array.from(allDistinctTestCaseIds);
 
             // Clean up progress tracking
             delete window.qaseProgressCallback;
@@ -3125,18 +3604,21 @@ const Traciator = {
             AviatorShared.hideLoading();
 
             // Step 6: Show traceability report with correct distinct test case count
-            Traciator.showTraceabilityReportModal(traceabilityMapping, jiraData.length, totalDistinctTestCases, testRuns.length);
+            Traciator.showTraceabilityReportModal(traceabilityMapping, jiraData.length, totalDistinctTestCases, testRuns.length, allDistinctTestCaseIdsArray);
 
         } catch (error) {
             delete window.qaseProgressCallback;
             delete window.qaseTrackChunks;
             AviatorShared.hideLoading();
             console.error('Error generating traceability report:', error);
-            AviatorShared.showMessagePopup('Error generating traceability report. Check console for details.', 'error', AviatorShared.hidePopup);
+            AviatorShared.showStatusModal([], {
+                notification: { message: 'Error generating traceability report. Check console for details.', type: 'error' },
+                onClose: AviatorShared.hidePopup
+            });
         }
     },
 
-    showTraceabilityReportModal: function (traceabilityMapping, totalJiraKeys, totalTestCases, totalTestRuns) {
+    showTraceabilityReportModal: function (traceabilityMapping, totalJiraKeys, totalTestCases, totalTestRuns, allDistinctTestCaseIds = []) {
         AviatorShared.jira.blockJiraShortcuts();
 
         const overlay = document.createElement('div');
@@ -3158,26 +3640,26 @@ const Traciator = {
                     <button id="closeTraceabilityModal" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text);">&times;</button>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                <div id="header-tiles" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--text);">${totalJiraKeys}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Jira Keys Found</div>
                     </div>
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--text);">${totalTestCases}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Test Cases</div>
                     </div>
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--text);">${totalTestRuns}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Test Runs</div>
                     </div>
-                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div class="tile" style="background: var(--bg-card); padding: 15px; border-radius: 8px; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: #4caf50;">${fullCoverage}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">Full Coverage</div>
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                <div id="coverage-tiles" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
                     <div style="background: #4caf50; color: white; padding: 8px; border-radius: 4px; text-align: center; font-size: 12px;">
                         Full Coverage: ${fullCoverage}
                     </div>
@@ -3254,7 +3736,7 @@ const Traciator = {
                     const displayTitle = title.length > maxLength ? title.substring(0, maxLength - 3) + '...' : title;
 
                     return `<div style="font-size: 11px; margin: 2px 0; line-height: 1.3;">
-                                            <div style="font-weight: 500; color: var(--text);">${displayTitle} <span style="color: var(--text-muted); font-size: 10px;">${resultSummary}</span></div>
+                                            <div id="testRun-${run.id}" style="font-weight: 500; color: var(--text);">${displayTitle} <span style="color: var(--text-muted); font-size: 10px;">${resultSummary}</span></div>
                                         </div>`;
                 })
                 .join('');
@@ -3312,6 +3794,7 @@ const Traciator = {
         };
 
         // Set up event listeners using centralized utility
+        let createTestRunFromTraceabilityInFlight = false;
         AviatorShared.addEventListeners(overlay, {
             '#closeTraceabilityModal': { 'click': closeModal },
             '#closeTraceabilityModal2': { 'click': closeModal },
@@ -3321,8 +3804,19 @@ const Traciator = {
                 }
             },
             '#createTestRunFromTraceability': {
-                'click': () => {
-                    Traciator.createTestRunFromTraceability(traceabilityMapping);
+                'click': async () => {
+                    if (createTestRunFromTraceabilityInFlight) return;
+                    createTestRunFromTraceabilityInFlight = true;
+
+                    const btn = overlay.querySelector('#createTestRunFromTraceability');
+                    if (btn) btn.disabled = true;
+
+                    try {
+                        await Traciator.createTestRunFromTraceability(traceabilityMapping, allDistinctTestCaseIds);
+                    } finally {
+                        createTestRunFromTraceabilityInFlight = false;
+                        if (btn) btn.disabled = false;
+                    }
                 }
             }
         });
@@ -3370,19 +3864,29 @@ const Traciator = {
         link.click();
     },
 
-    createTestRunFromTraceability: async function (traceabilityMapping) {
-        // Collect all unique Qase test case IDs from the traceability mapping
-        const allQaseIds = new Set();
-        Object.values(traceabilityMapping).forEach(item => {
-            item.testCases.forEach(testCase => {
-                allQaseIds.add(testCase.id);
-            });
-        });
+    createTestRunFromTraceability: async function (traceabilityMapping, allDistinctTestCaseIds = []) {
+        // Use the complete set of distinct test case IDs from the traceability report
+        let qaseIdsList;
 
-        const qaseIdsList = Array.from(allQaseIds);
+        if (allDistinctTestCaseIds && allDistinctTestCaseIds.length > 0) {
+            // Use the full set of distinct test case IDs (includes cases from both test cases and test runs)
+            qaseIdsList = allDistinctTestCaseIds;
+        } else {
+            // Fallback: collect test case IDs only from traceability mapping
+            const allQaseIds = new Set();
+            Object.values(traceabilityMapping).forEach(item => {
+                item.testCases.forEach(testCase => {
+                    allQaseIds.add(testCase.id);
+                });
+            });
+            qaseIdsList = Array.from(allQaseIds);
+        }
 
         if (qaseIdsList.length === 0) {
-            AviatorShared.showMessagePopup('No test cases found in traceability data to create a test run.', 'warning', AviatorShared.hidePopup);
+            AviatorShared.showStatusModal([], {
+                notification: { message: 'No test cases found in traceability data to create a test run.', type: 'warning' },
+                onClose: AviatorShared.hidePopup
+            });
             return;
         }
 
@@ -3422,13 +3926,13 @@ const Traciator = {
             try {
                 AviatorShared.showLoading('Fetching TeamCity builds...');
                 tcBuildDetails = await AviatorShared.teamcity.fetchAllTeamCityBuilds();
-                
+
                 // Count total builds to determine layout
                 if (tcBuildDetails && (tcBuildDetails.flatBuilds?.length > 0 || tcBuildDetails.projectStructure?.length > 0)) {
                     // Count only valid individual builds (exclude error builds)
                     const validIndividualBuilds = tcBuildDetails.flatBuilds?.filter(build => !build.isError) || [];
                     teamCityBuildsCount = validIndividualBuilds.length;
-                    
+
                     // Count builds in project structure recursively
                     if (tcBuildDetails.projectStructure && Array.isArray(tcBuildDetails.projectStructure)) {
                         function countBuildsInProjects(projects) {
@@ -3448,7 +3952,7 @@ const Traciator = {
                         const projectBuildCount = countBuildsInProjects(tcBuildDetails.projectStructure);
                         teamCityBuildsCount += projectBuildCount;
                     }
-                    
+
                 }
             } catch (error) {
                 console.warn('Failed to fetch TeamCity build details:', error);
@@ -3491,9 +3995,10 @@ const Traciator = {
 
         // Test cases summary section (full width)
         const summarySection = document.createElement('div');
-        summarySection.style.marginBottom = '20px';
+        summarySection.style.marginBottom = '15px';
+        summarySection.style.marginTop = '15px';
         summarySection.innerHTML = `
-            <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
+            <div id="create-run-summary" style="background: var(--bg-card); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
                 <p style="margin: 0; color: var(--text);">This test run will include <strong>${qaseIdsList.length} test cases</strong> identified from the traceability report.</p>
             </div>
         `;
@@ -3584,6 +4089,11 @@ const Traciator = {
             runTitleInput.value = `${versionName} Release Verification`;
         }
 
+        const { validate: validateRunTitle } = AviatorShared.validation.setupRunTitleValidation({
+            root: container,
+            minLength: 5
+        });
+
         // Event listeners
         const closeModal = () => {
             AviatorShared.hideLoading(); // Hide any loading screens that might be showing
@@ -3596,263 +4106,200 @@ const Traciator = {
             '#cancelTraceabilityTestRun': { 'click': closeModal },
             '#createTraceabilityTestRun': {
                 'click': async () => {
-                    const title = container.querySelector('#qaseRunTitle').value.trim();
-                    if (!title) {
-                        alert('Please enter a test run title');
+                    const createBtn = container.querySelector('#createTraceabilityTestRun');
+                    if (createBtn?.disabled) return;
+                    if (createBtn) createBtn.disabled = true;
+                    const title = runTitleInput ? runTitleInput.value.trim() : '';
+                    if (!validateRunTitle()) {
+                        if (runTitleInput) runTitleInput.focus();
+                        if (createBtn) createBtn.disabled = false;
                         return;
                     }
 
-            const jiraKeySelect = container.querySelector('#qaseJiraKey');
-            const selectedJiraKey = jiraKeySelect ? jiraKeySelect.value : null;
+                    const jiraKeySelect = container.querySelector('#qaseJiraKey');
+                    const selectedJiraKey = jiraKeySelect ? jiraKeySelect.value : null;
 
-            const environment = container.querySelector('#qaseEnv');
-            const milestone = container.querySelector('#qaseMilestone');
+                    const environment = container.querySelector('#qaseEnv');
+                    const milestone = container.querySelector('#qaseMilestone');
 
-            // Get selected test plans from the multi-select dropdown
-            const selectedTestPlanCheckboxes = container.querySelectorAll('#testPlanOptions input[type="checkbox"]:checked');
-            const selectedTestPlans = Array.from(selectedTestPlanCheckboxes)
-                .map(cb => parseInt(cb.value))
-                .filter(planId => !isNaN(planId) && planId > 0);
+                    // Get selected test plans from the multi-select dropdown
+                    const selectedTestPlanCheckboxes = container.querySelectorAll('#traciatorTestPlanOptions input[type="checkbox"]:checked');
+                    const selectedTestPlans = Array.from(selectedTestPlanCheckboxes)
+                        .map(cb => parseInt(cb.value))
+                        .filter(planId => !isNaN(planId) && planId > 0);
 
-            // Get test cases from selected test plans
-            let testPlanCaseIds = [];
-            if (selectedTestPlans.length > 0) {
-                try {
-                    AviatorShared.showLoading('Fetching test cases from selected test plans...');
-                    const planDetails = await Promise.all(
-                        selectedTestPlans.map(planId => AviatorShared.qase.fetchQaseTestPlanDetails(projectCode, planId))
-                    );
-                    testPlanCaseIds = planDetails.flatMap(plan => plan.caseIds).filter(id => id != null && !isNaN(id) && id > 0);
-                    testPlanCaseIds = [...new Set(testPlanCaseIds)]; // Remove duplicates
-                } catch (error) {
-                    console.warn('Error fetching test cases from selected test plans:', error);
-                    alert('Warning: Could not fetch test cases from some selected test plans.');
-                }
-            }
+                    // Get test cases from selected test plans
+                    let testPlanCaseIds = [];
+                    if (selectedTestPlans.length > 0) {
+                        try {
+                            AviatorShared.showLoading('Fetching test cases from selected test plans...');
+                            const planDetails = await Promise.all(
+                                selectedTestPlans.map(planId => AviatorShared.qase.fetchQaseTestPlanDetails(projectCode, planId))
+                            );
+                            testPlanCaseIds = planDetails.flatMap(plan => plan.caseIds).filter(id => id != null && !isNaN(id) && id > 0);
+                            testPlanCaseIds = [...new Set(testPlanCaseIds)]; // Remove duplicates
+                        } catch (error) {
+                            console.warn('Error fetching test cases from selected test plans:', error);
+                            alert('Warning: Could not fetch test cases from some selected test plans.');
+                        }
+                    }
 
-            // Combine traceability case IDs with test plan case IDs
-            const allCaseIds = [...new Set([...qaseIdsList, ...testPlanCaseIds])];
+                    // Combine traceability case IDs with test plan case IDs
+                    const allCaseIds = [...new Set([...qaseIdsList, ...testPlanCaseIds])];
 
-            const runData = {
-                title: title,
-                caseIds: allCaseIds,
-                jiraKey: selectedJiraKey,
-                environment: {
-                    id: environment?.value || null,
-                    text: environment?.options?.[environment.selectedIndex]?.text || null
-                },
-                milestone: {
-                    id: milestone?.value || null,
-                    text: milestone?.options?.[milestone.selectedIndex]?.text || null
-                },
-                configurations: {},
-                tcBuilds: [],
-                selectedTestPlans: selectedTestPlans // Add selected test plans for tracking
-            };
+                    const runData = {
+                        title: title,
+                        caseIds: allCaseIds,
+                        jiraKey: selectedJiraKey,
+                        environment: {
+                            id: environment?.value || null,
+                            text: environment?.options?.[environment.selectedIndex]?.text || null
+                        },
+                        milestone: {
+                            id: milestone?.value || null,
+                            text: milestone?.options?.[milestone.selectedIndex]?.text || null
+                        },
+                        configurations: {},
+                        tcBuilds: [],
+                        selectedTestPlans: selectedTestPlans // Add selected test plans for tracking
+                    };
 
-            // Get configuration selections
-            const configSelects = container.querySelectorAll('.qaseConfig');
-            configSelects.forEach(select => {
-                if (select.value) {
-                    runData.configurations[select.getAttribute('data-entity-id')] = parseInt(select.value, 10);
-                }
-            });
+                    // Get configuration selections
+                    const configSelects = container.querySelectorAll('.qaseConfig');
+                    configSelects.forEach(select => {
+                        if (select.value) {
+                            runData.configurations[select.getAttribute('data-entity-id')] = parseInt(select.value, 10);
+                        }
+                    });
 
-            // Get TeamCity build selections
-            const tcBuilds = container.querySelectorAll('.teamcity-build:checked');
-            runData.tcBuilds = Array.from(tcBuilds).map(b => b.dataset.id);
+                    // Get TeamCity build selections
+                    const tcBuilds = container.querySelectorAll('.teamcity-build:checked');
+                    runData.tcBuilds = Array.from(tcBuilds).map(b => b.dataset.id);
 
-            try {
-                AviatorShared.showLoading('Creating test run...');
-                await Traciator.createTraceabilityTestRunWithData(runData);
-                AviatorShared.hideLoading();
-                closeModal();
-                // Don't close the parent modal - let user decide if they want to stay or leave
-            } catch (error) {
-                AviatorShared.hideLoading();
-                console.error('Error creating test run:', error);
-                alert('Failed to create test run. See console for details.');
-            }
-                }
-            }
-        });
-    },
-
-    shouldShowTraciatorFeaturePopup: function () {
-        const seenVersion = localStorage.getItem("traciatorLastFeaturePopup") || "";
-        if (seenVersion !== Traciator.version) {
-            localStorage.setItem("traciatorLastFeaturePopup", Traciator.version);
-            return true;
-        }
-        return false;
-    },
-
-    showTraciatorFeaturePopup: function () {
-        // Ensure shadow root exists
-        if (!AviatorShared.shadowRoot) {
-            AviatorShared.createShadowRootOverlay();
-        }
-
-        // overlay
-        const overlay = document.createElement("div");
-        Object.assign(overlay.style, {
-            position: "fixed",
-            top: "0",
-            left: "0",
-            width: "100%",
-            height: "100%",
-            background: "rgba(0,0,0,0.65)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: "999999" // sits above everything including main modal
-        });
-
-        // modal box
-        const box = document.createElement("div");
-        box.classList = 'qasePopup'
-        box.id = 'qasePopup'
-
-        Object.assign(box.style, {
-            padding: "20px 24px",
-            borderRadius: "10px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-            /* size behavior */
-            minWidth: "250px",   // won't shrink below this
-            maxWidth: "600px",   // won't grow beyond this
-            width: "auto",       // lets it size based on content
-            boxSizing: "border-box",
-            /* layout */
-            display: "flex",
-            flexDirection: "column",   // stack title, text, button
-            justifyContent: "center",
-            alignItems: "center",
-        });
-
-        box.innerHTML = `
-            <h2 style="margin-top:0">🔍 Traciator Changelog 🔍</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.0.0</div>
-                    <div class="changelog-description">Initial Traciator release! Generate comprehensive traceability reports from release pages.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">Core Features</div>
-                    <ul class="changelog-feature-list">
-                        <li>Visual test coverage mapping between Jira issues, test cases, and test runs</li>
-                        <li>Export detailed CSV reports for stakeholder analysis</li>
-                        <li>Create test runs directly from traceability data</li>
-                        <li>Real-time test run statistics and coverage indicators</li>
-                        <li>Smart filtering by specific Jira keys from release pages</li>
-                        <li>Distinct test case counting across multiple data sources</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">How to use</div>
-                    <div class="changelog-text">Navigate to any Jira release page and click the 🔍 Traciator button to generate your traceability report!</div>
-                </div>
-            </div>
-              <button id="traciator-feature-ok" class="btn primary" style="margin-top: 10px">Got it</button>
-            `;
-
-        overlay.appendChild(box);
-        AviatorShared.shadowRoot.appendChild(overlay);
-
-        // Set up close button using centralized utility
-        AviatorShared.addEventListeners(overlay, {
-            '#traciator-feature-ok': {
-                'click': () => {
-                    overlay.remove();
+                    try {
+                        AviatorShared.showLoading('Creating test run...');
+                        await Traciator.createTraceabilityTestRunWithData(runData);
+                        AviatorShared.hideLoading();
+                        closeModal();
+                        // Don't close the parent modal - let user decide if they want to stay or leave
+                    } catch (error) {
+                        AviatorShared.hideLoading();
+                        console.error('Error creating test run:', error);
+                        alert('Failed to create test run. See console for details.');
+                        if (createBtn) createBtn.disabled = false;
+                    }
                 }
             }
         });
     },
 
     createTraceabilityTestRunWithData: async function (runData) {
-        const projectCode = AviatorShared.configuration.getQaseProjectCode();
-        const token = AviatorShared.configuration.getQaseApiToken();
+        // Single-flight guard: if called twice (e.g., double click), reuse the in-flight promise
+        if (Traciator._createTraceabilityTestRunPromise) return Traciator._createTraceabilityTestRunPromise;
 
-        // Filter out any null, undefined, or invalid case IDs
-        const validCaseIds = runData.caseIds.filter(id => id != null && !isNaN(id) && id > 0);
+        Traciator._createTraceabilityTestRunPromise = (async () => {
+            const projectCode = AviatorShared.configuration.getQaseProjectCode();
+            const token = AviatorShared.configuration.getQaseApiToken();
 
-        // Validate required data
-        if (!runData.title || !validCaseIds || validCaseIds.length === 0) {
-            throw new Error('Missing required run data: title and valid case IDs are required');
-        }
+            // Filter out any null, undefined, or invalid case IDs
+            const validCaseIds = runData.caseIds.filter(id => id != null && !isNaN(id) && id > 0);
 
-        // Build payload with proper null handling for optional fields
-        const payload = {
-            title: runData.title,
-            cases: validCaseIds
-        };
-
-        // Only add optional fields if they have valid values
-        if (runData.environment && runData.environment.id) {
-            payload.environment_id = parseInt(runData.environment.id, 10);
-        }
-
-        if (runData.milestone && runData.milestone.id) {
-            payload.milestone_id = parseInt(runData.milestone.id, 10);
-        }
-
-        if (runData.configurations && Object.keys(runData.configurations).length > 0) {
-            payload.configurations = runData.configurations;
-        }
-
-        const response = await AviatorShared.api({
-            method: 'POST',
-            url: `https://api.qase.io/v1/run/${projectCode}`,
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Token': token
-            },
-            data: payload
-        });
-
-        const runId = response.result.id;
-
-        // Send data to slack for usage tracking
-        await AviatorShared.slack.sendResultToSlack(runData);
-
-        // Trigger any TeamCity builds
-        if (runData.tcBuilds && runData.tcBuilds.length > 0) {
-            try {
-                await AviatorShared.teamcity.triggerTeamCityBuilds(runId, runData.caseIds);
-            } catch (error) {
-                console.warn('Failed to trigger TeamCity builds:', error);
+            // Validate required data
+            if (!runData.title || !validCaseIds || validCaseIds.length === 0) {
+                throw new Error('Missing required run data: title and valid case IDs are required');
             }
-        }
 
-        // Associate with Jira issue if selected
-        if (runData.jiraKey) {
-            try {
-                AviatorShared.showLoading('Associating test run with Jira issue...');
-                await AviatorShared.api({
-                    method: 'POST',
-                    url: `https://api.qase.io/v1/run/${projectCode}/external-issue`,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Token': token
-                    },
-                    data: {
-                        type: 'jira-cloud',
-                        links: [{ run_id: runId, external_issue: runData.jiraKey }]
-                    }
-                });
+            // Build payload with proper null handling for optional fields
+            const payload = {
+                title: runData.title,
+                cases: validCaseIds
+            };
 
-                console.log(`Qase: Test run ${runId} successfully associated with Jira issue ${runData.jiraKey}`);
-                AviatorShared.showMessagePopup(`Test run created and associated successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nJira Issue: ${runData.jiraKey}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
-
-            } catch (associationError) {
-                console.warn('Failed to associate test run with Jira issue:', associationError);
-                AviatorShared.showMessagePopup(`Test run created successfully!\n⚠️ Warning: Could not associate with Jira issue ${runData.jiraKey}\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
+            // Only add optional fields if they have valid values
+            if (runData.environment && runData.environment.id) {
+                payload.environment_id = parseInt(runData.environment.id, 10);
             }
-        } else {
-            AviatorShared.showMessagePopup(`Test run created successfully!\n\nRun ID: ${runId}\nTitle: ${runData.title}\nTest Cases: ${runData.caseIds.length}`, 'success', null);
+
+            if (runData.milestone && runData.milestone.id) {
+                payload.milestone_id = parseInt(runData.milestone.id, 10);
+            }
+
+            if (runData.configurations && Object.keys(runData.configurations).length > 0) {
+                payload.configurations = runData.configurations;
+            }
+
+            const response = await AviatorShared.api({
+                method: 'POST',
+                url: `https://api.qase.io/v1/run/${projectCode}`,
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Token': token
+                },
+                data: payload
+            });
+
+            const runId = response.result.id;
+
+            // Send data to slack for usage tracking
+            await AviatorShared.slack.sendResultToSlack(runData);
+
+            // Prepare summary for unified status modal
+            const summary = {
+                runId,
+                title: runData.title,
+                caseCount: runData.caseIds.length,
+                jiraKey: runData.jiraKey,
+                associationStatus: null,
+                associationMessage: null
+            };
+
+            // Associate with Jira issue if selected
+            if (runData.jiraKey) {
+                try {
+                    AviatorShared.showLoading('Associating test run with Jira issue...');
+                    await AviatorShared.api({
+                        method: 'POST',
+                        url: `https://api.qase.io/v1/run/${projectCode}/external-issue`,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Token': token
+                        },
+                        data: {
+                            type: 'jira-cloud',
+                            links: [{ run_id: runId, external_issue: runData.jiraKey }]
+                        }
+                    });
+
+                    console.log(`Qase: Test run ${runId} successfully associated with Jira issue ${runData.jiraKey}`);
+                    summary.associationStatus = 'linked';
+                    summary.associationMessage = `Linked to Jira issue ${runData.jiraKey}`;
+
+                } catch (associationError) {
+                    console.warn('Failed to associate test run with Jira issue:', associationError);
+                    summary.associationStatus = 'failed';
+                    summary.associationMessage = `Warning: Could not associate with Jira issue ${runData.jiraKey}`;
+                }
+            }
+
+            // Trigger any TeamCity builds (or show success-only modal when none)
+            if (runData.tcBuilds && runData.tcBuilds.length > 0) {
+                try {
+                    await AviatorShared.teamcity.triggerTeamCityBuilds(runId, runData.caseIds, { summary });
+                } catch (error) {
+                    console.warn('Failed to trigger TeamCity builds:', error);
+                    // still show summary-only modal to confirm run creation
+                    AviatorShared.showStatusModal([], { summary });
+                }
+            } else {
+                AviatorShared.showStatusModal([], { summary });
+            }
+        })();
+
+        try {
+            return await Traciator._createTraceabilityTestRunPromise;
+        } finally {
+            Traciator._createTraceabilityTestRunPromise = null;
         }
     }
 }
@@ -3861,18 +4308,18 @@ const Traciator = {
     // Initialize Aviator after all modules are loaded (matching original loader)
     async function initAviator() {
         try {
-            console.log('âœ… All Aviator modules loaded successfully');
+            console.log('All Aviator modules loaded successfully');
             
             // Initialize the main functionality
             if (typeof AviatorShared.addAviatorTools === 'function') {
                 AviatorShared.addAviatorTools();
-                console.log('âœ… Aviator tools initialized');
+                console.log('Aviator tools initialized');
             } else {
-                console.error('âŒ addAviatorTools function not found');
+                console.error('addAviatorTools function not found');
             }
             
         } catch (error) {
-            console.error('âŒ Failed to load Aviator modules:', error);
+            console.error('Failed to load Aviator modules:', error);
         }
     }
 

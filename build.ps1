@@ -47,18 +47,18 @@ $footer = @"
     // Initialize Aviator after all modules are loaded (matching original loader)
     async function initAviator() {
         try {
-            console.log('✅ All Aviator modules loaded successfully');
+            console.log('All Aviator modules loaded successfully');
             
             // Initialize the main functionality
             if (typeof AviatorShared.addAviatorTools === 'function') {
                 AviatorShared.addAviatorTools();
-                console.log('✅ Aviator tools initialized');
+                console.log('Aviator tools initialized');
             } else {
-                console.error('❌ addAviatorTools function not found');
+                console.error('addAviatorTools function not found');
             }
             
         } catch (error) {
-            console.error('❌ Failed to load Aviator modules:', error);
+            console.error('Failed to load Aviator modules:', error);
         }
     }
 
