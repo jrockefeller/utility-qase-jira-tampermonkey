@@ -1289,17 +1289,28 @@ const AviatorShared = {
             return allTestCases;
         },
 
-        fetchTestRunsWithPagination: async function (projectCode, startDate, jiraKeys = []) {
+          fetchTestRunsWithPagination: async function (projectCode, startDate, jiraKeys = []) {
             const allTestRuns = [];
-            const limit = 100;
+            const limit = 100; // Qase API enforces limit <= 100
             const cutoffDate = startDate || new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-            const fromStartTime = Math.floor(cutoffDate.getTime() / 1000);
+            const fromStartTime = Math.floor(cutoffDate.getTime() / 1000); // Unix timestamp
             const token = AviatorShared.configuration.getQaseApiToken();
             const jiraKeysSet = new Set((jiraKeys || []).map(k => String(k).toUpperCase()));
 
+            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+            const buildRunsUrl = ({ limit, offset, include }) => `https://api.qase.io/v1/run/${projectCode}?limit=${limit}&offset=${offset}&from_start_time=${fromStartTime}&include=${encodeURIComponent(include)}`;
+
             const extractJiraKey = (externalIssue) => {
                 if (!externalIssue || typeof externalIssue !== 'object') return null;
-                const candidates = [externalIssue.id, externalIssue.key, externalIssue.external_id, externalIssue.externalId, externalIssue.name, externalIssue.title];
+                const candidates = [
+                    externalIssue.id,
+                    externalIssue.key,
+                    externalIssue.external_id,
+                    externalIssue.externalId,
+                    externalIssue.name,
+                    externalIssue.title
+                ];
                 for (const candidate of candidates) {
                     if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
                 }
@@ -1317,41 +1328,264 @@ const AviatorShared = {
                 return jiraKeysSet.has(String(key).toUpperCase());
             };
 
-            let offset = 0;
-            let total = null;
+            const apiGetWithRetry = async (url, maxRetries = 5) => {
+                let attempt = 0;
+                while (true) {
+                    attempt++;
+                    try {
+                        const response = await AviatorShared.api({
+                            method: 'GET',
+                            url,
+                            headers: { 'Token': token }
+                        });
 
-            while (true) {
-                const url = `https://api.qase.io/v1/run/${projectCode}?limit=${limit}&offset=${offset}&from_start_time=${fromStartTime}&include=${encodeURIComponent('cases,external_issues')}`;
+                        if (response && response.status === false) {
+                            const msg = response.errorMessage || response.error || 'Qase API returned status:false';
+                            throw new Error(msg);
+                        }
 
-                try {
-                    const response = await AviatorShared.api({
-                        method: 'GET',
-                        url,
-                        headers: { 'Token': token }
-                    });
+                        return { response, attempts: attempt };
+                    } catch (error) {
+                        if (attempt > maxRetries) throw error;
 
-                    const entities = response?.result?.entities;
-                    const runs = Array.isArray(entities) ? entities : [];
-                    const filteredRuns = runs.filter(run => isRunForJiraKeys(run));
-
-                    allTestRuns.push(...filteredRuns);
-
-                    const totalRuns = typeof response?.result?.total === 'number'
-                        ? response.result.total
-                        : (typeof response?.result?.count === 'number' ? response.result.count : null);
-                    if (totalRuns !== null) total = totalRuns;
-
-                    offset += limit;
-                    const reachedTotal = total !== null && offset >= total;
-                    const noMorePages = runs.length < limit;
-                    if (reachedTotal || noMorePages) break;
-                } catch (error) {
-                    console.error('Error fetching test runs:', error);
-                    break;
+                        const backoffMs = Math.min(8000, 250 * Math.pow(2, attempt - 1)) + Math.floor(Math.random() * 250);
+                        console.warn(`Retrying Qase request (attempt ${attempt}/${maxRetries}) in ${backoffMs}ms:`, url, error);
+                        await sleep(backoffMs);
+                    }
                 }
-            }
+            };
 
-            return allTestRuns;
+            const mapWithConcurrency = async (items, concurrency, mapper) => {
+                const results = new Array(items.length);
+                let nextIndex = 0;
+                const worker = async () => {
+                    while (true) {
+                        const idx = nextIndex;
+                        if (idx >= items.length) return;
+                        nextIndex++;
+                        results[idx] = await mapper(items[idx], idx);
+                    }
+                };
+                const workers = Array.from({ length: Math.max(1, concurrency) }, () => worker());
+                await Promise.all(workers);
+                return results;
+            };
+
+            const mapAdaptiveConcurrency = async (items, opts, mapper) => {
+                const results = [];
+                let concurrency = Math.max(opts.minConcurrency, Math.min(opts.maxConcurrency, opts.initialConcurrency));
+                const batchSize = Math.max(1, opts.batchSize);
+
+                for (let start = 0; start < items.length; start += batchSize) {
+                    const batch = items.slice(start, start + batchSize);
+                    const batchResults = await mapWithConcurrency(batch, concurrency, mapper);
+                    results.push(...batchResults);
+
+                    const totalRequests = batchResults.length;
+                    const totalAttempts = batchResults.reduce((acc, r) => acc + (r?.attempts || 1), 0);
+                    const totalRetries = totalAttempts - totalRequests;
+                    const retryRate = totalRequests === 0 ? 0 : totalRetries / totalRequests;
+
+                    if (retryRate >= 0.25 && concurrency > opts.minConcurrency) {
+                        concurrency = Math.max(opts.minConcurrency, concurrency - 1);
+                    } else if (retryRate <= 0.05 && concurrency < opts.maxConcurrency) {
+                        concurrency = Math.min(opts.maxConcurrency, concurrency + 1);
+                    }
+                }
+
+                return results;
+            };
+
+            const reportProgress = (() => {
+                let lastAt = 0;
+                let lastKey = '';
+                let lastCurrent = 0;
+                const minIntervalMs = 250;
+
+                return (key, message, progress, force = false) => {
+                    if (!window.qaseTrackChunks || !window.qaseProgressCallback) return;
+                    const now = Date.now();
+
+                    const current = progress?.current ?? 0;
+                    const total = progress?.total ?? 0;
+                    const isComplete = total > 0 && current >= total;
+
+                    if (!force) {
+                        if (key === lastKey && current === lastCurrent && !isComplete) return;
+                        if (now - lastAt < minIntervalMs && !isComplete) return;
+                    }
+
+                    lastAt = now;
+                    lastKey = key;
+                    lastCurrent = current;
+
+                    window.qaseProgressCallback(message, progress);
+                };
+            })();
+
+            try {
+                const initial = await apiGetWithRetry(
+                    buildRunsUrl({ limit: 1, offset: 0, include: jiraKeysSet.size > 0 ? 'external_issue' : 'external_issue,cases' }),
+                    5
+                );
+                const initialResponse = initial.response;
+
+                if (!initialResponse || !initialResponse.result) {
+                    return allTestRuns;
+                }
+
+                const totalRunsAll = initialResponse.result.total;
+                const totalRunsFiltered = (typeof initialResponse.result.filtered === 'number') ? initialResponse.result.filtered : null;
+                const totalRuns = (typeof totalRunsFiltered === 'number') ? totalRunsFiltered : totalRunsAll;
+
+                if (totalRuns === 0) return allTestRuns;
+
+                const totalBatches = Math.ceil(totalRuns / limit);
+
+                if (jiraKeysSet.size > 0) {
+                    const offsetsWithHits = new Set();
+                    const refetchQueue = [];
+                    let scanCompleted = 0;
+                    let refetchCompleted = 0;
+                    let scanDone = false;
+
+                    let scanNextOffset = 0;
+                    const scanMaxOffsetExclusive = totalBatches * limit;
+                    let scanStopOffset = null;
+
+                    const wakeQueue = (() => {
+                        const waiters = [];
+                        const notify = () => {
+                            while (waiters.length) {
+                                const w = waiters.shift();
+                                try { w(); } catch (_) { }
+                            }
+                        };
+                        const wait = () => new Promise(resolve => waiters.push(resolve));
+                        return { notify, wait };
+                    })();
+
+                    const enqueueRefetchOffset = (offset) => {
+                        if (offsetsWithHits.has(offset)) return;
+                        offsetsWithHits.add(offset);
+                        refetchQueue.push(offset);
+                        wakeQueue.notify();
+                    };
+
+                    const takeRefetchOffset = async () => {
+                        while (refetchQueue.length === 0) {
+                            if (scanDone) return null;
+                            await wakeQueue.wait();
+                        }
+                        return refetchQueue.shift();
+                    };
+
+                    const scanConcurrency = 4;
+                    const refetchConcurrency = 2;
+
+                    const scanWorker = async () => {
+                        while (true) {
+                            if (scanStopOffset != null && scanNextOffset > scanStopOffset) return;
+                            if (scanNextOffset >= scanMaxOffsetExclusive) return;
+
+                            const offset = scanNextOffset;
+                            scanNextOffset += limit;
+
+                            const res = await apiGetWithRetry(buildRunsUrl({ limit, offset, include: 'external_issue' }), 5);
+                            const entities = res.response?.result?.entities || [];
+
+                            if (Array.isArray(entities) && entities.length < limit) {
+                                scanStopOffset = offset;
+                            }
+
+                            let hasHit = false;
+                            if (Array.isArray(entities)) {
+                                for (const run of entities) {
+                                    if (isRunForJiraKeys(run)) { hasHit = true; break; }
+                                }
+                            }
+                            if (hasHit) enqueueRefetchOffset(offset);
+
+                            scanCompleted++;
+                            reportProgress(
+                                'scan',
+                                `Scanning test runs... (${scanCompleted}/${totalBatches})`,
+                                { current: scanCompleted, total: totalBatches }
+                            );
+                        }
+                    };
+
+                    const refetchWorker = async () => {
+                        while (true) {
+                            const offset = await takeRefetchOffset();
+                            if (offset == null) return;
+
+                            const res = await apiGetWithRetry(buildRunsUrl({ limit, offset, include: 'external_issue,cases' }), 5);
+                            const runs = res.response?.result?.entities;
+                            if (Array.isArray(runs) && runs.length > 0) {
+                                const filtered = runs.filter(run => {
+                                    if (!run || !run.external_issue) return false;
+                                    return isRunForJiraKeys(run);
+                                });
+                                allTestRuns.push(...filtered);
+                            }
+
+                            refetchCompleted++;
+                            reportProgress(
+                                'refetch',
+                                `Fetching matching runs... (${refetchCompleted})`,
+                                { current: refetchCompleted, total: Math.max(refetchCompleted, offsetsWithHits.size) }
+                            );
+                        }
+                    };
+
+                    const scanWorkers = Array.from({ length: scanConcurrency }, () => scanWorker());
+                    const refetchWorkers = Array.from({ length: refetchConcurrency }, () => refetchWorker());
+
+                    await Promise.all(scanWorkers);
+                    scanDone = true;
+                    wakeQueue.notify();
+                    await Promise.all(refetchWorkers);
+
+                    return allTestRuns;
+                }
+
+                const offsets = Array.from({ length: totalBatches }, (_, i) => i * limit);
+                let allCompleted = 0;
+
+                const results = await mapAdaptiveConcurrency(
+                    offsets,
+                    { initialConcurrency: 6, minConcurrency: 2, maxConcurrency: 6, batchSize: 25 },
+                    async (offset) => {
+                        const res = await apiGetWithRetry(buildRunsUrl({ limit, offset, include: 'external_issue,cases' }), 5);
+
+                        allCompleted++;
+                        reportProgress(
+                            'all',
+                            `Fetching test runs... (${allCompleted}/${offsets.length})`,
+                            { current: allCompleted, total: offsets.length }
+                        );
+                        return { response: res.response, attempts: res.attempts };
+                    }
+                );
+
+                for (const r of results) {
+                    const response = r?.response;
+                    if (!response || !response.result || !response.result.entities) continue;
+
+                    const runs = response.result.entities;
+                    if (!Array.isArray(runs) || runs.length === 0) continue;
+
+                    const filteredRuns = runs.filter(run => !!run.external_issue);
+                    allTestRuns.push(...filteredRuns);
+                }
+
+                return allTestRuns;
+
+            } catch (error) {
+                console.error('Error fetching test runs:', error);
+                return allTestRuns;
+            }
         },
 
         verifyConnectToQase: async function () {
