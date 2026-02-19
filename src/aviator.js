@@ -2,34 +2,24 @@
 // Aviator Workflow v1.0.0
 
 const Aviator = {
-    version: '1.6.0',
-
-    shouldShowAviatorFeaturePopup: function () {
-        const seenVersion = localStorage.getItem("aviatorLastFeaturePopup") || "";
-        if (seenVersion !== Aviator.version) {
-            localStorage.setItem("aviatorLastFeaturePopup", Aviator.version);
-            return true;
-        }
-        return false;
-    },
+    version: '1.6.1',
+    versionKey: 'aviatorLastFeaturePopup',
 
     showFeaturePopup: function () {
-        // Create overlay using centralized utility
-        const overlay = AviatorShared.createOverlay({
-            position: 'absolute',
-            zIndex: '9999'
-        });
-
-        // Create modal box using centralized utility
-        const box = AviatorShared.createModalBox({
+        const box = AviatorShared.html.createModalBox({
             id: 'aviator-changelog',
         });
 
         box.innerHTML = `
-            <h2 style="margin-top:0">🚀 Aviator Changelog 🚀</h2>
+            <h2 class="qase-mt-0">🚀 Aviator Changelog 🚀</h2>
             <div class="changelog-container">
 
-            <div class="changelog-entry featured">
+                <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.6.1</div>
+                    <div class="changelog-text">UI styling tweeks for large Teamcity build tree.</div>
+                </div>
+
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.6.0</div>
                     <div class="changelog-description">UI/UX improvements:</div>
                     <ul class="changelog-feature-list">
@@ -85,7 +75,7 @@ const Aviator = {
                 <div class="changelog-entry">
                     <div class="changelog-version">v1.2</div>
                     <div class="changelog-description">Configure custom parameters to send with TeamCity builds.</div>
-                    <div style="margin-bottom: 8px; font-size: 14px;">
+                    <div class="changelog-note">
                         See <a href="https://github.com/jrockefeller/utility-qase-jira-tampermonkey/blob/main/README.md" target="_blank" class="changelog-link">README.md</a> for details.
                     </div>
                     <pre class="changelog-code-block">teamcity: {
@@ -105,90 +95,45 @@ const Aviator = {
                     <div class="changelog-text">Aviator runs in <code class="changelog-inline-code">shadowRoot</code>! Isolates from Jira hot keys.</div>
                 </div>
             </div>
-              <button id="feature-ok" class="btn primary" style="margin-top: 10px">Got it</button>
+                            <button id="feature-ok" class="btn primary qase-mt-10">Got it</button>
             `;
 
-        overlay.appendChild(box);
-        AviatorShared.shadowRoot.appendChild(overlay);
-
-        // Set up event listener using centralized utility
-        AviatorShared.addEventListeners(overlay, {
-            '#feature-ok': {
-                'click': () => {
-                    overlay.remove();
-                }
-            }
+        AviatorShared.html.openModal({
+            overlayId: 'qaseAviatorFeatureOverlay',
+            zIndex: '999999',
+            mountHost: 'body',
+            closeOnOverlayClick: false,
+            closeOnEscape: false,
+            closeSelectors: ['#feature-ok'],
+            container: box,
+            useSections: false
         });
     },
 
     getFormRunData: function () {
-        const environment = AviatorShared.shadowRoot.getElementById('qaseEnv')
-        const milestone = AviatorShared.shadowRoot.getElementById('qaseMilestone')
-
-        const environmentId = environment?.value || null;
-        const enviromentText = environment?.options[environment.selectedIndex].text || null
-        const milestoneId = milestone?.value || null;
-        const milestoneText = milestone?.options[milestone.selectedIndex].text || null;
-
-        const configSelections = Array.from(AviatorShared.shadowRoot.querySelectorAll('.qaseConfig'))
-            .reduce((acc, sel) => {
-                if (sel.value) acc[sel.getAttribute('data-entity-id')] = parseInt(sel.value, 10);
-                return acc;
-            }, {});
-
-        const allCaseIds = [];
-
-        // Get individual test cases (from linked test cases section)
-        const individualCases = AviatorShared.shadowRoot.querySelectorAll('.qase-item:checked[data-type="case"]');
-        individualCases.forEach(item => {
-            const dataIds = item.getAttribute('data-ids');
-            if (dataIds) {
-                const ids = dataIds.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
-                allCaseIds.push(...ids);
-            }
-        });
-
-        // Get selected test plan IDs (we'll fetch their case IDs later)
-        const selectedTestPlanIds = [];
-        const testPlanCheckboxes = AviatorShared.shadowRoot.querySelectorAll('#aviatorTestPlanOptions input[type="checkbox"]:checked');
-        testPlanCheckboxes.forEach(checkbox => {
-            const planId = parseInt(checkbox.value);
-            if (!isNaN(planId)) {
-                selectedTestPlanIds.push(planId);
-            }
-        });
-
-        // Remove duplicates from individual cases
-        const uniqueCaseIds = [...new Set(allCaseIds)];
-
-        const builds = AviatorShared.shadowRoot.querySelectorAll('.teamcity-build:checked');
-        const _builds = builds.length
-            ? Array.from(builds).map(b => b.dataset.id)
-            : [];
+        const common = AviatorShared.html.getTestRunFormData(AviatorShared.shadowRoot);
+        const caseIds = AviatorShared.html.getSelectedCaseIdsFromCheckedItems(AviatorShared.shadowRoot);
 
         return {
-            title: AviatorShared.shadowRoot.getElementById('qaseRunTitle').value.trim(),
-            environment: { id: environmentId, text: enviromentText },
-            milestone: { id: milestoneId, text: milestoneText },
-            configurations: configSelections,
-            caseIds: uniqueCaseIds,
-            selectedTestPlanIds: selectedTestPlanIds,
-            tcBuilds: _builds
+            title: common.title,
+            environment: common.environment,
+            milestone: common.milestone,
+            configurations: common.configurations,
+            caseIds: caseIds,
+            selectedTestPlanIds: common.selectedTestPlanIds,
+            tcBuilds: common.tcBuilds
         }
     },
 
     createQaseTestRun: async function () {
-        // Single-flight guard: if called twice (e.g., double click), reuse the in-flight promise
-        if (Aviator._createQaseTestRunPromise) return Aviator._createQaseTestRunPromise;
-        Aviator._createQaseTestRunPromise = (async () => {
+        return AviatorShared.util.singleFlight('Aviator.createQaseTestRun', async () => {
         const projectCode = AviatorShared.configuration.getQaseProjectCode();
-        const token = AviatorShared.configuration.getQaseApiToken();
 
         const data = Aviator.getFormRunData()
 
         // Check if we have any selections (individual cases OR test plans)
         if (data.caseIds.length === 0 && data.selectedTestPlanIds.length === 0) {
-            AviatorShared.showStatusModal([], { notification: { message: 'No test cases or test plans selected!', type: 'warning' } });
+            AviatorShared.html.showStatusModal([], { notification: { message: 'No test cases or test plans selected!', type: 'warning' } });
             return;
         }
 
@@ -196,58 +141,48 @@ const Aviator = {
         let testPlanCaseIds = [];
         if (data.selectedTestPlanIds.length > 0) {
             try {
-                const planDetails = await Promise.all(
-                    data.selectedTestPlanIds.map(planId => AviatorShared.qase.fetchQaseTestPlanDetails(projectCode, planId))
-                );
-                testPlanCaseIds = planDetails.flatMap(plan => plan.caseIds).filter(id => id != null && !isNaN(id) && id > 0);
-                testPlanCaseIds = [...new Set(testPlanCaseIds)]; // Remove duplicates
+                testPlanCaseIds = await AviatorShared.qase.fetchQaseCaseIdsForTestPlans(projectCode, data.selectedTestPlanIds);
             } catch (error) {
                 console.warn('Error fetching test cases from selected test plans:', error);
             }
         }
 
         // Combine individual cases with test plan cases
-        const allCaseIds = [...new Set([...data.caseIds, ...testPlanCaseIds])];
+        const allCaseIds = AviatorShared.qase.mergeQaseCaseIds(data.caseIds, testPlanCaseIds);
 
         // Final validation after fetching test plan case IDs
         if (allCaseIds.length === 0) {
-            AviatorShared.showStatusModal([], { notification: { message: 'No test cases found in selected plans!', type: 'warning' } });
+            AviatorShared.html.showStatusModal([], { notification: { message: 'No test cases found in selected plans!', type: 'warning' } });
             return;
         }
 
         if (!data.title) {
-            AviatorShared.showStatusModal([], { notification: { message: 'No test run title entered!', type: 'warning' } });
+            AviatorShared.html.showStatusModal([], { notification: { message: 'No test run title entered!', type: 'warning' } });
             return;
         }
 
-        const payload = {
-            title: data.title,
-            cases: allCaseIds,
-            environment_id: data.environment.id,
-            milestone_id: data.milestone.id,
-            configurations: data.configurations
-        };
-
         try {
-            const runData = await AviatorShared.api({
-                method: 'POST',
-                url: `https://api.qase.io/v1/run/${projectCode}`,
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'Token': token
-                },
-                data: payload
-            })
+            const runResult = await AviatorShared.qase.createQaseTestRun({
+                projectCode,
+                title: data.title,
+                caseIds: allCaseIds,
+                environmentId: data.environment.id,
+                milestoneId: data.milestone.id,
+                configurations: data.configurations
+            });
 
-            console.log(`Qase: Test Run Created: ${runData.result.id}`);
+            console.log(`Qase: Test Run Created: ${runResult.id}`);
 
-            // send data to slack for usage tracking
-            await AviatorShared.slack.sendResultToSlack(data)
+            // send data to slack for usage tracking (non-blocking for Jira comment)
+            try {
+                await AviatorShared.slack.sendResultToSlack(data, 'aviator')
+            } catch (slackError) {
+                console.warn('Slack tracking failed; continuing without blocking Jira comment', slackError);
+            }
 
             // Prepare summary for unified status modal
             const summary = {
-                runId: runData.result.id,
+                runId: runResult.id,
                 title: data.title,
                 caseCount: allCaseIds.length,
                 jiraKey: null,
@@ -255,9 +190,15 @@ const Aviator = {
                 associationMessage: null
             };
 
+            const handleStatusClose = () => {
+                if (AviatorShared.html.shouldClosePopup()) {
+                    AviatorShared.jira.addQaseTestRunsToJiraUI();
+                }
+            };
+
             // Associate with Jira AFTER run is confirmed created
             try {
-                const assoc = await AviatorShared.qase.associateQaseTestRunWithJira(projectCode, runData.result.id);
+                const assoc = await AviatorShared.qase.associateQaseTestRunWithJira(projectCode, runResult.id);
                 if (assoc) {
                     summary.jiraKey = assoc.issueKey || summary.jiraKey;
                     summary.associationStatus = assoc.status;
@@ -271,7 +212,7 @@ const Aviator = {
 
             // Create Jira comment documenting the test run creation
             try {
-                const commentSuccess = await AviatorShared.jira.createJiraComment(projectCode, runData.result.id, data);
+                const commentSuccess = await AviatorShared.jira.createJiraComment(projectCode, runResult.id, data);
                 if (!commentSuccess) {
                     console.warn('Jira comment creation failed, but test run was created successfully');
                 }
@@ -283,29 +224,20 @@ const Aviator = {
             // Trigger any TeamCity builds (or show summary-only modal when none)
             if (data.tcBuilds && data.tcBuilds.length > 0) {
                 try {
-                    await AviatorShared.teamcity.triggerTeamCityBuilds(runData.result.id, allCaseIds, { summary, closeParentPopup: true });
+                    await AviatorShared.teamcity.triggerTeamCityBuilds(runResult.id, allCaseIds, { summary, closeParentPopup: true, onClose: handleStatusClose });
                 } catch (tcError) {
                     console.warn('Failed to trigger TeamCity builds:', tcError);
-                    AviatorShared.showStatusModal([], { summary, closeParentPopup: true });
+                    AviatorShared.html.showStatusModal([], { summary, closeParentPopup: true, onClose: handleStatusClose });
                 }
             } else {
-                AviatorShared.showStatusModal([], { summary, closeParentPopup: true });
+                AviatorShared.html.showStatusModal([], { summary, closeParentPopup: true, onClose: handleStatusClose });
             }
-
-            // should we close the popup or keep it open for another run?
-            if (AviatorShared.shouldClosePopup()) AviatorShared.jira.addQaseTestRunsToJiraUI()
 
         } catch (err) {
             console.log('Error creating test run:', err);
-            AviatorShared.showStatusModal([], { notification: { message: 'Failed to create Qase test run. See console for details.', type: 'error' } });
+            AviatorShared.html.showStatusModal([], { notification: { message: 'Failed to create Qase test run. See console for details.', type: 'error' } });
         }
-        })();
-
-        try {
-            return await Aviator._createQaseTestRunPromise;
-        } finally {
-            Aviator._createQaseTestRunPromise = null;
-        }
+        });
     },
 
     scrapeAndShowAviator: async function () {
@@ -313,17 +245,17 @@ const Aviator = {
 
         /** check qase connection to verify can show the popup */
         if (await AviatorShared.qase.verifyConnectToQase()) {
-            AviatorShared.hideLoading();
-            AviatorShared.showStatusModal([], {
+            AviatorShared.html.hideLoading();
+            AviatorShared.html.showStatusModal([], {
                 notification: { message: 'Error connecting to Qase. Check your token and project are correct', type: 'error' },
-                onClose: AviatorShared.hidePopup
+                onClose: AviatorShared.html.hidePopup
             });
             return;
         }
 
         const projectCode = AviatorShared.configuration.getQaseProjectCode();
 
-        AviatorShared.showLoading('Fetching Qase test data...');
+        AviatorShared.html.showLoading('Fetching Qase test data...');
 
         let { issueKey } = AviatorShared.configuration.getJiraIssueDetails()
 
@@ -342,10 +274,10 @@ const Aviator = {
             : [];
 
         if (!availableTestPlans.length && !externalCases.length) {
-            AviatorShared.hideLoading();
-            AviatorShared.showStatusModal([], {
+            AviatorShared.html.hideLoading();
+            AviatorShared.html.showStatusModal([], {
                 notification: { message: 'No Qase Test Plans or Cases are part of this ticket', type: 'warning' },
-                onClose: AviatorShared.hidePopup
+                onClose: AviatorShared.html.hidePopup
             });
             return;
         }
@@ -353,23 +285,21 @@ const Aviator = {
         const tcBuildDetails = await AviatorShared.teamcity.fetchAllTeamCityBuilds();
         const qaseConfigData = await AviatorShared.qase.fetchQaseTestRunConfig()
 
-        AviatorShared.hideLoading();
+        AviatorShared.html.hideLoading();
         Aviator.showPopup(issueKey, availableTestPlans, externalCases, qaseConfigData, tcBuildDetails);
     }, 
 
     showPopup: function (issueKey, plans, externalCases, qaseConfigData, tcBuildDetails) {
-        AviatorShared.hidePopup();
+        AviatorShared.html.hidePopup();
         AviatorShared.createdRun = false; // reset for this popup session
 
         if (!plans.length && !externalCases.length) {
-            AviatorShared.showStatusModal([], {
+            AviatorShared.html.showStatusModal([], {
                 notification: { message: 'No Qase Test Plans or Cases are part of this ticket', type: 'warning' },
-                onClose: AviatorShared.hidePopup
+                onClose: AviatorShared.html.hidePopup
             });
             return;
         }
-
-        const overlay = AviatorShared.createShadowRootOverlay()
 
         // popup contents container
         const container = document.createElement('div');
@@ -377,47 +307,34 @@ const Aviator = {
         container.id = 'qasePopup'
 
         // Count TeamCity builds to determine layout
-        let teamCityBuildsCount = 0;
-        if (tcBuildDetails && (tcBuildDetails.flatBuilds?.length > 0 || tcBuildDetails.projectStructure?.length > 0)) {
-            // Count only valid individual builds (exclude error builds)
-            const validIndividualBuilds = tcBuildDetails.flatBuilds?.filter(build => !build.isError) || [];
-            teamCityBuildsCount = validIndividualBuilds.length;
+        const teamCityBuildsCount = AviatorShared.teamcity.countTeamCityBuilds(tcBuildDetails);
 
-            // Count builds in project structure recursively
-            if (tcBuildDetails.projectStructure && Array.isArray(tcBuildDetails.projectStructure)) {
-                function countBuildsInProjects(projects) {
-                    let count = 0;
-                    projects.forEach(project => {
-                        if (project.builds && Array.isArray(project.builds)) {
-                            const validProjectBuilds = project.builds.filter(build => !build.isError);
-                            count += validProjectBuilds.length;
-                        }
-                        if (project.subProjects && Array.isArray(project.subProjects)) {
-                            count += countBuildsInProjects(project.subProjects);
-                        }
-                    });
-                    return count;
-                }
-                const projectBuildCount = countBuildsInProjects(tcBuildDetails.projectStructure);
-                teamCityBuildsCount += projectBuildCount;
+        const { body: popupBody, footer, close } = AviatorShared.html.openModal({
+            container,
+            overlayId: 'qaseModalOverlay',
+            zIndex: '999999',
+            mountHost: 'auto',
+            closeOnOverlayClick: false,
+            closeOnEscape: false,
+            closeSelectors: [],
+            sections: {
+                headerHtml: `
+                    <div class="popup-title">
+                        <h2>Aviator</h2>
+                        <small>v${Aviator.version}</small>
+                        <label class="qase-ml-auto"><input type="checkbox" id="keep-open" />keep open</label>
+                    </div>
+                    <p>Create a Test Run in Qase by selecting a combination of test plans and cases.</p>`,
+                footerHtml: `
+                <button id="qaseToggleAllBtn" class="btn">☑️ Select All</button>
+                <button id="qaseRunBtn" class="btn primary">✅ Create Test Run</button>
+                <button id="qaseCancelBtn" class="btn secondary">Cancel</button>
+            `
+            },
+            onClose: () => {
+                if (AviatorShared.createdRun) AviatorShared.jira.addQaseTestRunsToJiraUI();
             }
-        }
-
-        // header
-        const header = document.createElement('div')
-        header.classList = 'popup-header'
-        header.innerHTML = `
-                <div class="popup-title">
-                    <h2>Aviator</h2>
-                    <small>v${Aviator.version}</small>
-                    <label style="margin-left: auto"><input type="checkbox" id="keep-open" />keep open</label>
-                </div>
-                <p>Create a Test Run in Qase by selecting a combination of test plans and cases.</p>`
-        container.appendChild(header)
-
-        // content body with columns
-        const popupBody = document.createElement('div')
-        popupBody.classList = 'popup-body'
+        });
 
         if (teamCityBuildsCount <= 3) {
             // 2-column layout: TeamCity builds stay under test run configuration
@@ -468,96 +385,69 @@ const Aviator = {
             popupBody.appendChild(column3)
         }
 
-        container.appendChild(popupBody)
 
-        // footer
-        const footer = document.createElement('div')
-        footer.classList = 'popup-footer'
-        footer.innerHTML = `
-            <button id="qaseToggleAllBtn" class="btn">☑️ Select All</button>
-            <button id="qaseRunBtn" class="btn primary">✅ Create Test Run</button>
-            <button id="qaseCancelBtn" class="btn secondary">Cancel</button>
-        `
+        // Move footer to bottom (after body is populated)
         container.appendChild(footer)
-
-        AviatorShared.shadowRoot.appendChild(container);
-
-        const modalContent = document.querySelector('[role="dialog"], .jira-dialog, .css-1ynzxqw');
-        if (modalContent) {
-            modalContent.appendChild(overlay)
-        }
-        else {
-            document.body.appendChild(overlay);
-        }
 
         // block jira shortcuts
         AviatorShared.jira.blockJiraShortcuts();
 
         const { validate: validateRunTitle, input: runTitleInput } = AviatorShared.validation.setupRunTitleValidation({
-            root: AviatorShared.shadowRoot,
+            root: container,
             minLength: 5
         });
         if (runTitleInput) {
             runTitleInput.value = AviatorShared.configuration.generateTitlePlaceholder(issueKey);
         }
 
-        // Handle Create Test Run click (single-flight)
-        const qaseRunBtn = AviatorShared.shadowRoot.getElementById('qaseRunBtn');
-        let qaseRunBtnInFlight = false;
-        qaseRunBtn.onclick = async () => {
-            const data = Aviator.getFormRunData();
-            if (!data.caseIds.length && !data.selectedTestPlanIds.length) {
-                AviatorShared.showStatusModal([], { notification: { message: 'No test cases or test plans selected!', type: 'warning' } });
-                return;
-            }
-
-            if (!validateRunTitle()) {
-                if (runTitleInput) runTitleInput.focus();
-                return;
-            }
-
-            if (qaseRunBtnInFlight) return;
-            qaseRunBtnInFlight = true;
-            qaseRunBtn.disabled = true;
-
-            try {
-                // Show full-page loading overlay
-                AviatorShared.showLoading('Creating Test Run...');
-
-                // Call your async function
-                await Aviator.createQaseTestRun();
-
-                // Close popup and loading overlay when done
-                AviatorShared.hideLoading();
-                AviatorShared.createdRun = true; // flag for jira UI update
-            } catch (err) {
-                console.error('Error creating test run:', err);
-                AviatorShared.hideLoading();
-                AviatorShared.showStatusModal([], { notification: { message: 'Failed to create Test Run. See console for details.', type: 'error' } });
-            } finally {
-                qaseRunBtnInFlight = false;
-                const stillThere = AviatorShared.shadowRoot?.getElementById('qaseRunBtn');
-                if (stillThere) stillThere.disabled = false;
-            }
-        };
-
-        AviatorShared.shadowRoot.getElementById('qaseCancelBtn').onclick = () => {
-            AviatorShared.hidePopup()
-            if (AviatorShared.createdRun) AviatorShared.jira.addQaseTestRunsToJiraUI() // if a run was created, update the jira UI when closing
-        };
-
-        // Toggle all checkboxes
-        const toggleBtn = AviatorShared.shadowRoot.getElementById('qaseToggleAllBtn');
+        // Standardized event wiring (no .onclick assignments)
         let allSelected = false;
-        toggleBtn.onclick = () => {
-            const checkboxes = AviatorShared.shadowRoot.querySelectorAll('#test-cases-section .qase-item');
-            allSelected = !allSelected;
-            checkboxes.forEach(cb => cb.checked = allSelected);
-            toggleBtn.textContent = allSelected ? '🚫 Deselect All' : '☑️ Select All';
-        };
+        AviatorShared.html.addEventListeners(container, {
+            '#qaseCancelBtn': { 'click': close },
+            '#qaseToggleAllBtn': {
+                'click': () => {
+                    const checkboxes = AviatorShared.shadowRoot.querySelectorAll('#test-cases-section .qase-item');
+                    allSelected = !allSelected;
+                    checkboxes.forEach(cb => cb.checked = allSelected);
+                    const toggleBtn = AviatorShared.shadowRoot.getElementById('qaseToggleAllBtn');
+                    if (toggleBtn) toggleBtn.textContent = allSelected ? '🚫 Deselect All' : '☑️ Select All';
+                }
+            },
+            '#qaseRunBtn': {
+                'click': () => AviatorShared.util.singleFlight('Aviator.qaseRunBtnClick', async () => {
+                    const qaseRunBtn = AviatorShared.shadowRoot.getElementById('qaseRunBtn');
+                    const data = Aviator.getFormRunData();
+                    if (!data.caseIds.length && !data.selectedTestPlanIds.length) {
+                        AviatorShared.html.showStatusModal([], { notification: { message: 'No test cases or test plans selected!', type: 'warning' } });
+                        return;
+                    }
+
+                    if (!validateRunTitle()) {
+                        if (runTitleInput) runTitleInput.focus();
+                        return;
+                    }
+
+                    if (qaseRunBtn) qaseRunBtn.disabled = true;
+
+                    try {
+                        AviatorShared.html.showLoading('Creating Test Run...');
+                        await Aviator.createQaseTestRun();
+                        AviatorShared.html.hideLoading();
+                        AviatorShared.createdRun = true;
+                    } catch (err) {
+                        console.error('Error creating test run:', err);
+                        AviatorShared.html.hideLoading();
+                        AviatorShared.html.showStatusModal([], { notification: { message: 'Failed to create Test Run. See console for details.', type: 'error' } });
+                    } finally {
+                        const stillThere = AviatorShared.shadowRoot?.getElementById('qaseRunBtn');
+                        if (stillThere) stillThere.disabled = false;
+                    }
+                })
+            }
+        });
 
         // then run feature popup once per version
-        if (Aviator.shouldShowAviatorFeaturePopup()) {
+        if (AviatorShared.configuration.shouldShowFeaturePopup(Aviator.versionKey, Aviator.version)) {
             Aviator.showFeaturePopup(AviatorShared.shadowRoot);
         }
     }
