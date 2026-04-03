@@ -54,6 +54,11 @@ A Tampermonkey script to consolidate Jira + Qase + Teamcity to present users a m
 (async () => {
     // --- User local config ---
     window.aviator = {
+        options: {
+            jiraCommentNotes: false,
+            epiciator: false,
+            boardiator: false
+        },
         qase: {
             token: '<your qase token>',
             projectCode: '<qase project>',
@@ -193,6 +198,11 @@ Configuration for Qase test management integration.
 **Example – Qase only**
 ```javascript
 window.aviator = {
+    options: {
+        jiraCommentNotes: false,
+        epiciator: false,
+        boardiator: false
+    },
     qase: {
         token: 'your-qase-api-token',
         projectCode: 'DEMOS'
@@ -202,6 +212,11 @@ window.aviator = {
 **Example – Qase with custom title**
 ```javascript
 window.aviator = {
+    options: {
+        jiraCommentNotes: false,
+        epiciator: false,
+        boardiator: false
+    },
     qase: {
         token: 'your-qase-api-token',
         projectCode: 'DEMOS',
@@ -212,10 +227,15 @@ window.aviator = {
 **Example – Qase with options**
 ```javascript
 window.aviator = {
+    options: {
+        jiraCommentNotes: true,
+        epiciator: true,
+        boardiator: true
+    },
     qase: {
         token: 'your-qase-api-token',
         projectCode: 'DEMOS',
-        title: '{issueKey} Smoke Tests - {issueTitle}'
+        title: '{issueKey} Smoke Tests - {issueTitle}',
         options: {
           environment: true,
           milestone: false,
@@ -224,6 +244,16 @@ window.aviator = {
     }
 };
 ```
+
+### **`options`** (Optional)
+Top-level feature flags for Aviator UI and behavior. These default to `false` when the section or property is missing.
+
+| Property            | Type    | Default | Description |
+|---------------------|---------|---------|-------------|
+| `jiraCommentNotes`  | boolean | `false` | Shows an optional notes field in the Aviator run form and appends the notes to the Jira comment after run creation. |
+| `epiciator`         | boolean | `false` | Shows the Epiciator button on Jira Epic pages. When disabled, Aviator remains the available button on issue pages. |
+| `boardiator`        | boolean | `false` | Shows the Boardiator button on supported Jira board pages. |
+
 ---
 
 ### **`teamcity`** (Optional)
@@ -239,6 +269,11 @@ Configuration for triggering TeamCity builds.
 **Example – Qase + TeamCity**
 ```javascript
 window.aviator = {
+    options: {
+        jiraCommentNotes: false,
+        epiciator: false,
+        boardiator: false
+    },
     qase: {
         token: 'your-qase-api-token',
         projectCode: 'DEMOS'

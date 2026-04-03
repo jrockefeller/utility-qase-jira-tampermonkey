@@ -186,9 +186,13 @@ const Traciator = {
         }
     },
 
-    showTraciator: function (traceabilityMapping, totalJiraKeys, totalTestCases, totalTestRuns, allDistinctTestCaseIds = []) {
+    showTraciator: function (traceabilityMapping, totalJiraKeys, totalTestCases, totalTestRuns, allDistinctTestCaseIds = [], options = {}) {
         AviatorShared.html.hidePopup();
         AviatorShared.jira.blockJiraShortcuts();
+
+        const toolName = options?.toolName || 'Traciator';
+        const toolVersion = options?.version || Traciator.version;
+        const showFeaturePopup = options?.showFeaturePopup !== false;
 
         const container = document.createElement('div');
         container.className = 'qasePopup traciator-report-popup';
@@ -203,8 +207,8 @@ const Traciator = {
         container.innerHTML = `
                 <div class="traciator-titlebar">
                     <div class="traciator-title">
-                        <h2>Traciator</h2>
-                        <small>v${Traciator.version}</small>
+                        <h2>${toolName}</h2>
+                        <small>v${toolVersion}</small>
                     </div>
                     <button id="closeTraceabilityModal" class="qase-icon-btn" type="button">&times;</button>
                 </div>
@@ -363,7 +367,7 @@ const Traciator = {
 
                     try {
                         await AviatorShared.util.singleFlight('Traciator.createTestRunFromTraceability', async () => {
-                            await Traciator.compileTestRunData(traceabilityMapping, allDistinctTestCaseIds);
+                            await Traciator.compileTestRunData(traceabilityMapping, allDistinctTestCaseIds, options);
                         });
                     } finally {
                         if (btn) btn.disabled = false;
@@ -373,7 +377,7 @@ const Traciator = {
         });
 
         // Show Traciator changelog once per version
-        if (AviatorShared.configuration.shouldShowFeaturePopup(Traciator.versionKey, Traciator.version)) {
+        if (showFeaturePopup && AviatorShared.configuration.shouldShowFeaturePopup(Traciator.versionKey, Traciator.version)) {
             // Delay slightly to ensure modal is fully rendered
             setTimeout(() => {
                 Traciator.showTraciatorFeaturePopup();
@@ -657,7 +661,7 @@ const Traciator = {
         return Traciator.exportTraceabilityToCSV(traceabilityMapping);
     },
 
-    compileTestRunData: async function (traceabilityMapping, allDistinctTestCaseIds = []) {
+    compileTestRunData: async function (traceabilityMapping, allDistinctTestCaseIds = [], options = {}) {
         // Use the complete set of distinct test case IDs from the traceability report
         let qaseIdsList;
 
@@ -685,224 +689,26 @@ const Traciator = {
         AviatorShared.html.hideLoading();
 
         // Show the test run configuration modal with Jira key selection
-        await Traciator.showTraceabilityTestRunModal(qaseIdsList, qaseConfigData, availableJiraKeys, traceabilityMapping);
+        await AviatorShared.html.showCreateTestRunModal(qaseIdsList, qaseConfigData, availableJiraKeys, {
+            source: options?.source || 'traciator',
+            defaultTitle: options?.defaultTitle,
+            sourceLabel: options?.sourceLabel || 'the traceability report',
+            onCreateRun: Traciator.createTraceabilityTestRunWithData
+        });
     },
 
     complileTestRunData: async function (traceabilityMapping, allDistinctTestCaseIds = []) {
         return Traciator.compileTestRunData(traceabilityMapping, allDistinctTestCaseIds);
     },
 
-    showTraceabilityTestRunModal: async function (qaseIdsList, qaseConfigData, availableJiraKeys = [], traceabilityMapping = {}) {
-        const projectCode = AviatorShared.configuration.getQaseProjectCode();
-
-        // Styles are injected into the shadow root by createShadowRootOverlay()
-
-        // Fetch all available test plans for the multi-select dropdown
-        let availableTestPlans = [];
-        try {
-            AviatorShared.html.showLoading('Fetching available test plans...');
-            availableTestPlans = await AviatorShared.qase.fetchQaseTestPlans();
-        } catch (error) {
-            console.warn('Could not fetch available test plans:', error);
-            // Continue without test plans - user can still use traceability test cases
-        }
-
-        // Add TeamCity builds if available
-        let tcBuildDetails = [];
-        let teamCityBuildsCount = 0;
-        if (window.aviator?.teamcity?.builds || window.aviator?.teamcity?.projects) {
-            try {
-                AviatorShared.html.showLoading('Fetching TeamCity builds...');
-                tcBuildDetails = await AviatorShared.teamcity.fetchAllTeamCityBuilds();
-
-                teamCityBuildsCount = AviatorShared.teamcity.countTeamCityBuilds(tcBuildDetails);
-            } catch (error) {
-                console.warn('Failed to fetch TeamCity build details:', error);
-                teamCityBuildsCount = 0;
-            }
-        }
-
-        // Hide loading now that all data is fetched
-        AviatorShared.html.hideLoading();
-
-        const {
-            overlay,
-            container,
-            body: popupBody,
-            close: closeModal
-        } = AviatorShared.html.openModal({
-            overlayId: 'qaseModalOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            modalBox: {
-                className: 'qasePopup',
-                id: 'qaseTestRunModal',
-                customStyles: {
-                    maxWidth: '800px',
-                    width: '90%',
-                    maxHeight: '85vh',
-                    justifyContent: 'flex-start',
-                    alignItems: 'stretch'
-                }
-            },
-            sections: {
-                headerHtml: `
-                <div class="popup-title">
-                    <h2>✅ Create Test Run</h2>
-                    <button id="qaseCloseBtn" class="qase-icon-btn qase-ml-auto">&times;</button>
-                </div>`,
-                footerHtml: `
-                <button id="qaseRunBtn" class="btn primary">✅ Create Test Run</button>
-                <button id="qaseCancelBtn" class="btn secondary">Cancel</button>
-            `
-            },
-            onClose: () => {
-                AviatorShared.html.hideLoading();
-            }
+    showTraceabilityTestRunModal: async function (qaseIdsList, qaseConfigData, availableJiraKeys = [], traceabilityMapping = {}, options = {}) {
+        // Backward-compatible wrapper; the modal is hosted in AviatorShared now.
+        return AviatorShared.html.showCreateTestRunModal(qaseIdsList, qaseConfigData, availableJiraKeys, {
+            ...options,
+            source: options?.source || 'traciator',
+            sourceLabel: options?.sourceLabel || 'the traceability report',
+            onCreateRun: Traciator.createTraceabilityTestRunWithData
         });
-
-        // Test cases summary section (full width)
-        const summaryWrap = document.createElement('div');
-        summaryWrap.className = 'qase-mt-10';
-        summaryWrap.style.marginBottom = '15px';
-
-        const summaryCard = document.createElement('div');
-        summaryCard.id = 'create-run-summary';
-        summaryCard.className = 'qase-card';
-
-        const summaryP = document.createElement('p');
-        summaryP.style.margin = '0';
-        summaryP.textContent = `This test run will include ${qaseIdsList.length} test cases identified from the traceability report.`;
-        // emphasize number with <strong> without style attributes
-        summaryP.innerHTML = `This test run will include <strong>${qaseIdsList.length} test cases</strong> identified from the traceability report.`;
-
-        summaryCard.appendChild(summaryP);
-        summaryWrap.appendChild(summaryCard);
-        container.insertBefore(summaryWrap, popupBody);
-
-        // Content body - will be configured based on TeamCity build count
-        popupBody.style.display = 'flex';
-        popupBody.style.flex = '1';
-        popupBody.style.overflow = 'hidden';
-
-        // Adjust modal width based on layout (now that we know the build count)
-        if (teamCityBuildsCount > 0) {
-            Object.assign(container.style, {
-                maxWidth: '1200px',
-                width: '95%'
-            });
-        }
-
-        // Determine layout based on TeamCity builds count
-
-        if (teamCityBuildsCount > 0) {
-            // Two column layout for Traciator when builds are available
-            // Column 1: Configuration only
-            const column1 = document.createElement('div');
-            column1.classList.add('popup-column');
-            column1.style.flex = '1';
-            const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
-            column1.appendChild(configElement);
-            popupBody.appendChild(column1);
-
-            // Column 2: TeamCity builds only (without wrapper div for standalone column)
-            const column2 = document.createElement('div');
-            column2.classList.add('popup-column');
-            column2.style.flex = '1';
-            const tcElement = AviatorShared.html.htmlTeamCityBuilds(tcBuildDetails, false);
-            column2.appendChild(tcElement);
-            popupBody.appendChild(column2);
-
-            // Force row layout immediately
-            popupBody.setAttribute('style', 'display: flex !important; flex-direction: row !important; gap: 20px !important; flex: 1 !important; overflow: hidden !important;');
-        } else {
-            // Single column layout when no TeamCity builds
-            // Single column: Configuration only
-            const column1 = document.createElement('div');
-            column1.classList.add('popup-column');
-            column1.style.flex = '1';
-            const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
-            column1.appendChild(configElement);
-            popupBody.appendChild(column1);
-
-            // Single column layout
-            popupBody.setAttribute('style', 'display: flex !important; flex-direction: column !important; flex: 1 !important; overflow: hidden !important;');
-        }
-
-
-
-        // overlay + container already mounted by openModal
-
-        // Set default title based on release page version
-        const runTitleInput = container.querySelector('#qaseRunTitle');
-        if (runTitleInput) {
-            const versionName = Traciator.extractVersionNameFromReleasePage();
-            runTitleInput.value = `${versionName} Release Verification`;
-        }
-
-        const { validate: validateRunTitle } = AviatorShared.validation.setupRunTitleValidation({
-            root: container,
-            minLength: 5
-        });
-
-        // Run button handler
-        const runBtn = container.querySelector('#qaseRunBtn');
-        if (runBtn) {
-            runBtn.addEventListener('click', async () => {
-                const createBtn = container.querySelector('#qaseRunBtn');
-                if (createBtn?.disabled) return;
-                if (createBtn) createBtn.disabled = true;
-                if (!validateRunTitle()) {
-                    if (runTitleInput) runTitleInput.focus();
-                    if (createBtn) createBtn.disabled = false;
-                    return;
-                }
-
-                const formData = AviatorShared.html.getTestRunFormData(container);
-                const selectedTestPlans = formData.selectedTestPlanIds;
-
-                // Get test cases from selected test plans
-                let testPlanCaseIds = [];
-                if (selectedTestPlans.length > 0) {
-                    try {
-                        AviatorShared.html.showLoading('Fetching test cases from selected test plans...');
-                        testPlanCaseIds = await AviatorShared.qase.fetchQaseCaseIdsForTestPlans(projectCode, selectedTestPlans);
-                    } catch (error) {
-                        console.warn('Error fetching test cases from selected test plans:', error);
-                        alert('Warning: Could not fetch test cases from some selected test plans.');
-                    }
-                }
-
-                // Combine traceability case IDs with test plan case IDs
-                const allCaseIds = AviatorShared.qase.mergeQaseCaseIds(qaseIdsList, testPlanCaseIds);
-
-                const runData = {
-                    title: formData.title,
-                    caseIds: allCaseIds,
-                    jiraKey: formData.jiraKey,
-                    environment: formData.environment,
-                    milestone: formData.milestone,
-                    configurations: formData.configurations,
-                    tcBuilds: formData.tcBuilds,
-                    selectedTestPlans: selectedTestPlans // Add selected test plans for tracking
-                };
-
-                try {
-                    AviatorShared.html.showLoading('Creating test run...');
-                    await Traciator.createTraceabilityTestRunWithData(runData);
-                    AviatorShared.html.hideLoading();
-                    closeModal();
-                    // Don't close the parent modal - let user decide if they want to stay or leave
-                } catch (error) {
-                    AviatorShared.html.hideLoading();
-                    console.error('Error creating test run:', error);
-                    alert('Failed to create test run. See console for details.');
-                    if (createBtn) createBtn.disabled = false;
-                }
-            });
-        }
     },
 
     createTraceabilityTestRunWithData: async function (runData) {
@@ -929,7 +735,8 @@ const Traciator = {
             const runId = runResult.id;
 
             // Send data to slack for usage tracking
-            await AviatorShared.slack.sendResultToSlack(runData, 'traciator');
+            const source = runData?.source || 'traciator';
+            await AviatorShared.slack.sendResultToSlack(runData, source);
 
             // Prepare summary for unified status modal
             const summary = {

@@ -29,10 +29,10 @@
         teamcity: {
             token: '<REPLACE WITH YOUR OWN TEAMCITY TOKEN>',
             builds: [
-                '<YOUR TEAMCITY BUILDS - IF YOU HAVE NONE TO INTEGRATE THEN IGNORE THIS SECTION>'
+                '<YOUR TEAMCITY BUILD ID(s) - IF YOU HAVE NONE TO INTEGRATE THEN DELETE THIS PROPERTY>'
             ],
-            parameters: [
-                { name: 'THE_PARAMETER', value: 'wooooooooooooo' }
+            projects: [
+               '<TEAMCITY PROJECT ID(s) - IF YOU HAVE NONE TO INTEGRATE THEN DELETE THIS PROPERTY>'
             ]
         }
         */
@@ -40,6 +40,7 @@
 
     /* 
     // If you need to handle multiple jira projects that associated to different qase projects. Then update the if statements inside of the match block.
+    // Otherwise can ignore or delete this block
     const _url = window.location.href;
     const match = _url.match(/paylocity\.atlassian\.net\/(?:browse\/([A-Z0-9]+)-|jira\/software\/c\/projects\/([A-Z0-9]+)\/)/);
 

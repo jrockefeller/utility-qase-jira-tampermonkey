@@ -2,7 +2,7 @@
 // Aviator Workflow v1.0.0
 
 const Aviator = {
-    version: '1.6.1',
+    version: '1.6.2',
     versionKey: 'aviatorLastFeaturePopup',
 
     showFeaturePopup: function () {
@@ -15,6 +15,17 @@ const Aviator = {
             <div class="changelog-container">
 
                 <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.6.2</div>
+                    <div class="changelog-description">Feature flags, Jira comment notes, and comment accuracy improvements.</div>
+                    <ul class="changelog-feature-list">
+                        <li>New top-level window.aviator.options feature flags for enabling experimental or optional features</li>
+                        <li>Optional jiraCommentNotes flag adds a notes field to Aviator and includes those notes in the Jira comment</li>
+                        <li>Jira comments now correctly count selected test cases when users choose only test plans</li>
+                        <li>New epiciator and boardiator flags control whether those buttons appear in Jira</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry ">
                     <div class="changelog-version">v1.6.1</div>
                     <div class="changelog-text">UI styling tweeks for large Teamcity build tree.</div>
                 </div>
@@ -116,6 +127,7 @@ const Aviator = {
 
         return {
             title: common.title,
+            commentNotes: common.commentNotes,
             environment: common.environment,
             milestone: common.milestone,
             configurations: common.configurations,
@@ -142,6 +154,7 @@ const Aviator = {
         if (data.selectedTestPlanIds.length > 0) {
             try {
                 testPlanCaseIds = await AviatorShared.qase.fetchQaseCaseIdsForTestPlans(projectCode, data.selectedTestPlanIds);
+                data.testPlanCaseIds = testPlanCaseIds;
             } catch (error) {
                 console.warn('Error fetching test cases from selected test plans:', error);
             }
@@ -292,6 +305,7 @@ const Aviator = {
     showPopup: function (issueKey, plans, externalCases, qaseConfigData, tcBuildDetails) {
         AviatorShared.html.hidePopup();
         AviatorShared.createdRun = false; // reset for this popup session
+        const includeJiraCommentNotes = AviatorShared.configuration.isFeatureEnabled('jiraCommentNotes');
 
         if (!plans.length && !externalCases.length) {
             AviatorShared.html.showStatusModal([], {
@@ -348,7 +362,9 @@ const Aviator = {
             // column 2: Test Run Details with TeamCity builds included
             const column2 = document.createElement('div')
             column2.classList = 'popup-column'
-            column2.appendChild(AviatorShared.html.htmlTestRunDetails(qaseConfigData, []))
+            column2.appendChild(AviatorShared.html.htmlTestRunDetails(qaseConfigData, [], [], {
+                includeJiraCommentNotes
+            }))
 
             column2.appendChild(AviatorShared.html.htmlTeamCityBuilds(tcBuildDetails))
             popupBody.appendChild(column2)
@@ -373,7 +389,9 @@ const Aviator = {
             const column2 = document.createElement('div')
             column2.classList = 'popup-column'
             column2.style.flex = '1'
-            column2.appendChild(AviatorShared.html.htmlTestRunDetails(qaseConfigData, []))
+            column2.appendChild(AviatorShared.html.htmlTestRunDetails(qaseConfigData, [], [], {
+                includeJiraCommentNotes
+            }))
             popupBody.appendChild(column2)
 
             // column 3: TeamCity builds only (without wrapper div for standalone column)

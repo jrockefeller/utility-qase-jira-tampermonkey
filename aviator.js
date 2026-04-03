@@ -1,6 +1,6 @@
 ﻿// ==================================================
 // Aviator - Combined Build
-// Generated on 2026-02-19 13:06:10
+// Generated on 2026-04-03 10:55:03
 // This file replaces the module loader with combined code
 // ==================================================
 
@@ -284,6 +284,7 @@ const AviatorShared = {
     }
 
     .qasePopup input[type="text"],
+    .qasePopup textarea,
     .qasePopup select {
         width: 100%;
         padding: 8px 10px;
@@ -293,6 +294,12 @@ const AviatorShared = {
         font-size: 0.95rem;
         background: var(--bg);
         color: var(--text);
+    }
+
+    .qasePopup textarea {
+        min-height: 88px;
+        resize: vertical;
+        box-sizing: border-box;
     }
 
     .qasePopup #qaseRunTitle {
@@ -1012,6 +1019,7 @@ const AviatorShared = {
         // Jira is an SPA and will frequently re-render the top navigation.
         // Keep a small observer around to re-attach the Aviator button if Jira removes it.
         let aviatorTicketObserver = null;
+        let boardPageObserver = null;
 
         /** function: creates button to attach to jira page */
         const createAviatorButton = () => {
@@ -1050,6 +1058,105 @@ const AviatorShared = {
             return btn;
         };
 
+        /** function: creates Epiciator button for epic issue pages */
+        const createEpiciatorButton = () => {
+            const btn = document.createElement('button');
+            btn.textContent = "🧩 Epiciator";
+            btn.id = 'qaseEpiciatorButton';
+
+            const jiraCreateButton = document.querySelector('[data-testid="atlassian-navigation--create-button"]');
+            btn.classList = jiraCreateButton?.classList;
+
+            btn.style.marginLeft = '5px';
+            btn.style.background = isDarkMode ? '#82B1FF' : '#0052CC';
+            btn.style.color = 'white';
+            btn.onmouseenter = () => btn.style.background = isDarkMode ? '#A5C8FF' : '#4C9AFF';
+            btn.onmouseleave = () => btn.style.background = isDarkMode ? '#82B1FF' : '#0052CC';
+
+            btn.addEventListener('click', Epiciator.initEpiciator);
+            return btn;
+        };
+
+        const createBoardiatorButton = () => {
+            const btn = document.createElement('button');
+            btn.textContent = '📋 Boardiator';
+            btn.id = 'qaseBoardiatorButton';
+
+            const jiraCreateButton = document.querySelector('[data-testid="atlassian-navigation--create-button"]');
+            btn.classList = jiraCreateButton?.classList;
+
+            btn.style.marginLeft = '5px';
+            btn.style.background = isDarkMode ? '#861F41' : '#E5751F';
+            btn.style.color = 'white';
+            btn.onmouseenter = () => btn.style.background = isDarkMode ? '#823b52' : '#e3975d';
+            btn.onmouseleave = () => btn.style.background = isDarkMode ? '#861F41' : '#E5751F';
+
+            btn.addEventListener('click', Boardiator.initBoardiator);
+            return btn;
+        };
+
+        const isEpicIssueContext = () => {
+            const issueTypeBtn = document.querySelector(
+                '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] ' +
+                '[data-testid="issue.views.issue-base.foundation.change-issue-type.button"]'
+            );
+            const label = issueTypeBtn?.getAttribute('aria-label') || '';
+            return label.trim() === 'Epic - Change work type';
+        };
+
+        const isActiveBoardContext = (url = window.location.href) => {
+            try {
+                const parsedUrl = new URL(url, window.location.origin);
+                return /\/jira\/software\/c\/projects\/[^\/]+\/boards\/\d+$/i.test(parsedUrl.pathname);
+            } catch {
+                return /\/jira\/software\/c\/projects\/[^\/]+\/boards\/\d+(?:\?.*)?$/i.test(url);
+            }
+        };
+
+        const isEpiciatorEnabled = () => AviatorShared.configuration.isFeatureEnabled('epiciator');
+        const isBoardiatorEnabled = () => AviatorShared.configuration.isFeatureEnabled('boardiator');
+
+        const removeBoardiatorButtons = () => {
+            document.querySelectorAll('#qaseBoardiatorButton').forEach((btn) => {
+                try { btn.remove(); } catch { /* ignore */ }
+            });
+        };
+
+        const stopBoardButtonObserver = () => {
+            if (!boardPageObserver) return;
+
+            try { boardPageObserver.disconnect(); } catch { /* ignore */ }
+            boardPageObserver = null;
+        };
+
+        const syncButtonsNextToCreateButton = () => {
+            const jiraCreateButton = document.querySelector('[data-testid="atlassian-navigation--create-button"]');
+            if (!jiraCreateButton || !jiraCreateButton.parentNode) return false;
+
+            const parent = jiraCreateButton.parentNode;
+
+            const isEpic = isEpicIssueContext();
+            const showEpiciator = isEpic && isEpiciatorEnabled();
+
+            const aviatorBtn = parent.querySelector('#qaseScrapeButton');
+            const epiciatorBtn = parent.querySelector('#qaseEpiciatorButton');
+
+            // These two tools are mutually exclusive on /browse/* pages.
+            if (showEpiciator) {
+                if (aviatorBtn) {
+                    try { aviatorBtn.remove(); } catch { /* ignore */ }
+                }
+                if (!epiciatorBtn) parent.insertBefore(createEpiciatorButton(), jiraCreateButton.nextSibling);
+            } else {
+                if (epiciatorBtn) {
+                    try { epiciatorBtn.remove(); } catch { /* ignore */ }
+                }
+                if (!aviatorBtn) parent.insertBefore(createAviatorButton(), jiraCreateButton.nextSibling);
+            }
+
+            return true;
+        };
+
         /** function: add Traciator button to release pages */
         const insertTraciatorButtonInReleasePage = () => {
             if (document.querySelector('#qaseTraciatorButton')) return;
@@ -1059,14 +1166,73 @@ const AviatorShared = {
             }
         };
 
+        const insertBoardiatorButtonInBoardPage = () => {
+            if (!isBoardiatorEnabled()) {
+                removeBoardiatorButtons();
+                return false;
+            }
+
+            const jiraCreateButton = document.querySelector('[data-testid="atlassian-navigation--create-button"]');
+            if (!jiraCreateButton || !jiraCreateButton.parentNode) return false;
+
+            const parent = jiraCreateButton.parentNode;
+            const boardiatorBtn = parent.querySelector('#qaseBoardiatorButton');
+
+            document.querySelectorAll('#qaseBoardiatorButton').forEach((btn) => {
+                if (btn.parentNode !== parent) {
+                    try { btn.remove(); } catch { /* ignore */ }
+                }
+            });
+
+            if (!boardiatorBtn) {
+                parent.insertBefore(createBoardiatorButton(), jiraCreateButton.nextSibling);
+            }
+
+            return true;
+        };
+
+        const observeBoardButtonInPage = () => {
+            if (!isBoardiatorEnabled()) {
+                removeBoardiatorButtons();
+                stopBoardButtonObserver();
+                return;
+            }
+
+            const ensureInserted = () => {
+                try {
+                    return insertBoardiatorButtonInBoardPage();
+                } catch (error) {
+                    console.error('❌ Error inserting Boardiator button:', error);
+                    return false;
+                }
+            };
+
+            ensureInserted();
+
+            if (boardPageObserver) return;
+
+            boardPageObserver = new MutationObserver(() => {
+                if (!isActiveBoardContext(location.href)) {
+                    removeBoardiatorButtons();
+                    stopBoardButtonObserver();
+                    return;
+                }
+
+                ensureInserted();
+            });
+
+            boardPageObserver.observe(document.body, { childList: true, subtree: true });
+        };
+
         /** function: add button when modal is showing for selected issue */
         const insertAviatorButtonInModal = () => {
-            if (document.querySelector('#qaseScrapeButton')) return;
             const header = document.querySelector('div#jira-issue-header');
             if (!header) return;
-            const bar = document.createElement('div');
-            bar.id = 'qaseTopBar';
-            bar.style = `
+            let bar = document.querySelector('#qaseTopBar');
+            if (!bar) {
+                bar = document.createElement('div');
+                bar.id = 'qaseTopBar';
+                bar.style = `
             //width: 100%;
             background: ${isDarkMode ? '#1f1f21' : 'white'};
             color: ${isDarkMode ? '#a9abaf' : 'white'};
@@ -1078,35 +1244,50 @@ const AviatorShared = {
             justify-content: center;
             gap: 12px;
         `;
-            bar.appendChild(createAviatorButton());
-            header.parentElement.insertBefore(bar, header);
+                header.parentElement.insertBefore(bar, header);
+            } else {
+                // Jira frequently re-renders; make sure the bar is still mounted above the current header.
+                if (bar.parentElement !== header.parentElement || bar.nextSibling !== header) {
+                    try { header.parentElement.insertBefore(bar, header); } catch { /* ignore */ }
+                }
+            }
+
+            const isEpic = isEpicIssueContext();
+            const showEpiciator = isEpic && isEpiciatorEnabled();
+            const aviBtn = bar.querySelector('#qaseScrapeButton');
+            const epBtn = bar.querySelector('#qaseEpiciatorButton');
+            if (showEpiciator) {
+                if (aviBtn) {
+                    try { aviBtn.remove(); } catch { /* ignore */ }
+                }
+                if (!epBtn) bar.appendChild(createEpiciatorButton());
+            } else {
+                if (epBtn) {
+                    try { epBtn.remove(); } catch { /* ignore */ }
+                }
+                if (!aviBtn) bar.appendChild(createAviatorButton());
+            }
         };
 
         /** function add button when url is the whole ticket */
         const insertAviatorButtonInTicket = () => {
-            const buttonId = 'qaseScrapeButton';
-
             const ensureInserted = () => {
                 const jiraCreateButton = document.querySelector('[data-testid="atlassian-navigation--create-button"]');
                 if (!jiraCreateButton || !jiraCreateButton.parentNode) return false;
 
                 const parent = jiraCreateButton.parentNode;
 
-                // If it's already attached next to the current create button, we're done.
-                if (parent.querySelector(`#${buttonId}`)) return true;
-
-                // Clean up any stray duplicates from previous renders.
-                document.querySelectorAll(`#${buttonId}`).forEach((btn) => {
+                // Clean up stray duplicates from previous renders.
+                document.querySelectorAll('#qaseScrapeButton, #qaseEpiciatorButton').forEach((btn) => {
                     if (btn.parentNode !== parent) {
                         try { btn.remove(); } catch { /* ignore */ }
                     }
                 });
 
                 try {
-                    parent.insertBefore(createAviatorButton(), jiraCreateButton.nextSibling);
-                    return true;
+                    return syncButtonsNextToCreateButton();
                 } catch (error) {
-                    console.error('❌ Error inserting Aviator button:', error);
+                    console.error('❌ Error inserting Aviator/Epiciator buttons:', error);
                     return false;
                 }
             };
@@ -1130,12 +1311,13 @@ const AviatorShared = {
         };
         /** funciton: add button when in backlog and ticket is selected */
         const insertAviatorButtonInSidebar = () => {
-            if (document.querySelector('#qaseScrapeButton')) return;
             const header = document.querySelector('div[data-testid="issue.views.issue-details.issue-layout.compact-layout"]');
             if (!header) return;
-            const bar = document.createElement('div');
-            bar.id = 'qaseTopBar';
-            bar.style = `
+            let bar = document.querySelector('#qaseTopBar');
+            if (!bar) {
+                bar = document.createElement('div');
+                bar.id = 'qaseTopBar';
+                bar.style = `
             //width: 100%;
             background: ${isDarkMode ? '#1f1f21' : 'white'};
             color: ${isDarkMode ? '#a9abaf' : 'white'};
@@ -1147,13 +1329,41 @@ const AviatorShared = {
             justify-content: center;
             gap: 12px;
         `;
-            bar.appendChild(createAviatorButton());
-            header.parentElement.insertBefore(bar, header);
+                header.parentElement.insertBefore(bar, header);
+            } else {
+                if (bar.parentElement !== header.parentElement || bar.nextSibling !== header) {
+                    try { header.parentElement.insertBefore(bar, header); } catch { /* ignore */ }
+                }
+            }
+
+            const isEpic = isEpicIssueContext();
+            const showEpiciator = isEpic && isEpiciatorEnabled();
+            const aviBtn = bar.querySelector('#qaseScrapeButton');
+            const epBtn = bar.querySelector('#qaseEpiciatorButton');
+            if (showEpiciator) {
+                if (aviBtn) {
+                    try { aviBtn.remove(); } catch { /* ignore */ }
+                }
+                if (!epBtn) bar.appendChild(createEpiciatorButton());
+            } else {
+                if (epBtn) {
+                    try { epBtn.remove(); } catch { /* ignore */ }
+                }
+                if (!aviBtn) bar.appendChild(createAviatorButton());
+            }
         };
 
         /** function: decides where to put the button */
         const handleLocationChange = () => {
             const url = window.location.href;
+
+            if (!isActiveBoardContext(url)) {
+                removeBoardiatorButtons();
+                stopBoardButtonObserver();
+            } else if (!isBoardiatorEnabled()) {
+                removeBoardiatorButtons();
+                stopBoardButtonObserver();
+            }
 
             // Check for release report pages for Traciator button
             if (/\/projects\/[^\/]+\/versions\/\d+\/tab\/release-report-all-issues/.test(url)) {
@@ -1165,12 +1375,22 @@ const AviatorShared = {
                 }, 500);
             } else if (/\/projects\/[^\/]+\/boards\/\d+(?:\?.*)?[?&]selectedIssue=/.test(url)) {
                 const interval = setInterval(() => {
+                    if (document.querySelector('[data-testid="atlassian-navigation--create-button"]')) {
+                        observeBoardButtonInPage();
+                    }
                     if (document.querySelector('div#jira-issue-header')) {
                         insertAviatorButtonInModal();
                         clearInterval(interval);
                     }
                     else if (document.querySelector('div[data-testid="issue.views.issue-details.issue-layout.compact-layout"]')) {
                         insertAviatorButtonInSidebar();
+                        clearInterval(interval);
+                    }
+                }, 500);
+            } else if (isActiveBoardContext(url)) {
+                const interval = setInterval(() => {
+                    if (document.querySelector('[data-testid="atlassian-navigation--create-button"]')) {
+                        observeBoardButtonInPage();
                         clearInterval(interval);
                     }
                 }, 500);
@@ -1326,6 +1546,15 @@ const AviatorShared = {
             return { issueKey, issueTitle }
         },
 
+        getFeatureOptions: function () {
+            return window.aviator?.options || {};
+        },
+
+        isFeatureEnabled: function (featureName) {
+            if (!featureName) return false;
+            return AviatorShared.configuration.getFeatureOptions()?.[featureName] === true;
+        },
+
         shouldShowFeaturePopup: function (key, version) {
             const seenVersion = localStorage.getItem(key) || "";
             if (seenVersion !== version) {
@@ -1393,6 +1622,9 @@ const AviatorShared = {
             }
 
             const qaseRunUrl = `https://app.qase.io/run/${projectCode}/dashboard/${runId}`;
+            const directCaseIds = Array.isArray(formData?.caseIds) ? formData.caseIds : [];
+            const testPlanCaseIds = Array.isArray(formData?.testPlanCaseIds) ? formData.testPlanCaseIds : [];
+            const totalSelectedCaseCount = AviatorShared.qase.mergeQaseCaseIds(directCaseIds, testPlanCaseIds).length;
 
             // Build comment content
             let commentBody = `*✈️ Aviator Test Run Created*\n\n`;
@@ -1400,7 +1632,7 @@ const AviatorShared = {
             // Replace square brackets with parentheses for Jira link display
             const linkDisplayTitle = formData.title.replace(/\[/g, '(').replace(/\]/g, ')');
             commentBody += `*Test Run:* [${linkDisplayTitle}|${qaseRunUrl}] (ID: ${runId})\n`;
-            commentBody += `*Test Cases:* ${formData.caseIds.length} selected\n`;
+            commentBody += `*Test Cases:* ${totalSelectedCaseCount} selected\n`;
 
             if (formData.environment.text && formData.environment.text !== 'null') {
                 commentBody += `*Environment:* ${formData.environment.text}\n`;
@@ -1419,6 +1651,11 @@ const AviatorShared = {
                 formData.tcBuilds.forEach(buildId => {
                     commentBody += `• [${buildId}|https://ci.paylocity.com/buildConfiguration/${buildId}?mode=builds]\n`;
                 });
+            }
+
+            const commentNotes = String(formData?.commentNotes || '').trim();
+            if (commentNotes) {
+                commentBody += `\n*Additional Notes:*\n${commentNotes}\n`;
             }
 
             commentBody += `\n_Created via Aviator at ${new Date().toLocaleString()}_`;
@@ -2809,6 +3046,7 @@ const AviatorShared = {
             const scope = root || AviatorShared.shadowRoot || document;
 
             const runTitleInput = scope.querySelector('#qaseRunTitle');
+            const jiraCommentNotes = scope.querySelector('#qaseJiraCommentNotes');
             const environment = scope.querySelector('#qaseEnv');
             const milestone = scope.querySelector('#qaseMilestone');
             const jiraKeySelect = scope.querySelector('#qaseJiraKey');
@@ -2836,6 +3074,7 @@ const AviatorShared = {
 
             return {
                 title: runTitleInput ? runTitleInput.value.trim() : '',
+                commentNotes: jiraCommentNotes ? jiraCommentNotes.value.trim() : '',
                 jiraKey: jiraKeySelect ? (jiraKeySelect.value || null) : null,
                 environment: { id: environmentId, text: enviromentText },
                 milestone: { id: milestoneId, text: milestoneText },
@@ -3359,7 +3598,8 @@ const AviatorShared = {
             return div
         },
 
-        htmlTestRunDetails: function (qaseConfigData, availableJiraKeys = [], availableTestPlans = []) {
+        htmlTestRunDetails: function (qaseConfigData, availableJiraKeys = [], availableTestPlans = [], options = {}) {
+            const includeJiraCommentNotes = options?.includeJiraCommentNotes === true;
             const div = document.createElement('div')
             div.id = 'test-run-configuration-section'
 
@@ -3383,6 +3623,10 @@ const AviatorShared = {
                 <label>Test Run Title</label>
                 <input type="text" id="qaseRunTitle">
                 ${jiraKeySection}
+                ${includeJiraCommentNotes ? `
+                <label>Additional Jira Comment Notes (Optional)</label>
+                <textarea id="qaseJiraCommentNotes" placeholder="Add any context to include in the Jira comment..."></textarea>
+                ` : ''}
             `
 
             // Add test plan selector
@@ -3439,10 +3683,215 @@ const AviatorShared = {
             return div
         },
 
+        showCreateTestRunModal: async function (qaseIdsList, qaseConfigData, availableJiraKeys = [], options = {}) {
+            const projectCode = AviatorShared.configuration.getQaseProjectCode();
+
+            const sourceLabel = options?.sourceLabel || 'the selected items';
+            const onCreateRun = (typeof options?.onCreateRun === 'function')
+                ? options.onCreateRun
+                : (typeof Traciator !== 'undefined' && typeof Traciator.createTraceabilityTestRunWithData === 'function')
+                    ? Traciator.createTraceabilityTestRunWithData
+                    : null;
+
+            if (!onCreateRun) {
+                throw new Error('No create-run handler provided (options.onCreateRun)');
+            }
+
+            // Fetch all available test plans for the multi-select dropdown
+            let availableTestPlans = [];
+            try {
+                AviatorShared.html.showLoading('Fetching available test plans...');
+                availableTestPlans = await AviatorShared.qase.fetchQaseTestPlans();
+            } catch (error) {
+                console.warn('Could not fetch available test plans:', error);
+                // Continue without test plans
+            }
+
+            // Add TeamCity builds if available
+            let tcBuildDetails = [];
+            let teamCityBuildsCount = 0;
+            if (window.aviator?.teamcity?.builds || window.aviator?.teamcity?.projects) {
+                try {
+                    AviatorShared.html.showLoading('Fetching TeamCity builds...');
+                    tcBuildDetails = await AviatorShared.teamcity.fetchAllTeamCityBuilds();
+
+                    teamCityBuildsCount = AviatorShared.teamcity.countTeamCityBuilds(tcBuildDetails);
+                } catch (error) {
+                    console.warn('Failed to fetch TeamCity build details:', error);
+                    teamCityBuildsCount = 0;
+                }
+            }
+
+            AviatorShared.html.hideLoading();
+
+            const { container, body: popupBody, close: closeModal } = AviatorShared.html.openModal({
+                overlayId: 'qaseModalOverlay',
+                zIndex: '999999',
+                mountHost: 'body',
+                closeOnOverlayClick: false,
+                closeOnEscape: false,
+                modalBox: {
+                    className: 'qasePopup',
+                    id: 'qaseTestRunModal',
+                    customStyles: {
+                        maxWidth: '800px',
+                        width: '90%',
+                        maxHeight: '85vh',
+                        justifyContent: 'flex-start',
+                        alignItems: 'stretch'
+                    }
+                },
+                sections: {
+                    headerHtml: `
+                    <div class="popup-title">
+                        <h2>✅ Create Test Run</h2>
+                        <button id="qaseCloseBtn" class="qase-icon-btn qase-ml-auto">&times;</button>
+                    </div>`,
+                    footerHtml: `
+                    <button id="qaseRunBtn" class="btn primary">✅ Create Test Run</button>
+                    <button id="qaseCancelBtn" class="btn secondary">Cancel</button>
+                `
+                },
+                onClose: () => {
+                    AviatorShared.html.hideLoading();
+                }
+            });
+
+            // Test cases summary section (full width)
+            const summaryWrap = document.createElement('div');
+            summaryWrap.className = 'qase-mt-10';
+            summaryWrap.style.marginBottom = '15px';
+
+            const summaryCard = document.createElement('div');
+            summaryCard.id = 'create-run-summary';
+            summaryCard.className = 'qase-card';
+
+            const summaryP = document.createElement('p');
+            summaryP.style.margin = '0';
+            summaryP.textContent = `This test run will include ${qaseIdsList.length} test cases identified from ${sourceLabel}.`;
+            summaryP.innerHTML = `This test run will include <strong>${qaseIdsList.length} test cases</strong> identified from ${sourceLabel}.`;
+
+            summaryCard.appendChild(summaryP);
+            summaryWrap.appendChild(summaryCard);
+            container.insertBefore(summaryWrap, popupBody);
+
+            // Content body
+            popupBody.style.display = 'flex';
+            popupBody.style.flex = '1';
+            popupBody.style.overflow = 'hidden';
+
+            // Adjust modal width based on layout (now that we know the build count)
+            if (teamCityBuildsCount > 0) {
+                Object.assign(container.style, {
+                    maxWidth: '1200px',
+                    width: '95%'
+                });
+            }
+
+            if (teamCityBuildsCount > 0) {
+                const column1 = document.createElement('div');
+                column1.classList.add('popup-column');
+                column1.style.flex = '1';
+                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
+                column1.appendChild(configElement);
+                popupBody.appendChild(column1);
+
+                const column2 = document.createElement('div');
+                column2.classList.add('popup-column');
+                column2.style.flex = '1';
+                const tcElement = AviatorShared.html.htmlTeamCityBuilds(tcBuildDetails, false);
+                column2.appendChild(tcElement);
+                popupBody.appendChild(column2);
+
+                popupBody.setAttribute('style', 'display: flex !important; flex-direction: row !important; gap: 20px !important; flex: 1 !important; overflow: hidden !important;');
+            } else {
+                const column1 = document.createElement('div');
+                column1.classList.add('popup-column');
+                column1.style.flex = '1';
+                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
+                column1.appendChild(configElement);
+                popupBody.appendChild(column1);
+
+                popupBody.setAttribute('style', 'display: flex !important; flex-direction: column !important; flex: 1 !important; overflow: hidden !important;');
+            }
+
+            // Default title
+            const runTitleInput = container.querySelector('#qaseRunTitle');
+            if (runTitleInput) {
+                if (options?.defaultTitle) {
+                    runTitleInput.value = options.defaultTitle;
+                } else if (typeof Traciator !== 'undefined' && typeof Traciator.extractVersionNameFromReleasePage === 'function') {
+                    const versionName = Traciator.extractVersionNameFromReleasePage();
+                    if (versionName) runTitleInput.value = `${versionName} Release Verification`;
+                }
+            }
+
+            const { validate: validateRunTitle } = AviatorShared.validation.setupRunTitleValidation({
+                root: container,
+                minLength: 5
+            });
+
+            const runBtn = container.querySelector('#qaseRunBtn');
+            if (runBtn) {
+                runBtn.addEventListener('click', async () => {
+                    const createBtn = container.querySelector('#qaseRunBtn');
+                    if (createBtn?.disabled) return;
+                    if (createBtn) createBtn.disabled = true;
+
+                    if (!validateRunTitle()) {
+                        if (runTitleInput) runTitleInput.focus();
+                        if (createBtn) createBtn.disabled = false;
+                        return;
+                    }
+
+                    const formData = AviatorShared.html.getTestRunFormData(container);
+                    const selectedTestPlans = formData.selectedTestPlanIds;
+
+                    // Get test cases from selected test plans
+                    let testPlanCaseIds = [];
+                    if (selectedTestPlans.length > 0) {
+                        try {
+                            AviatorShared.html.showLoading('Fetching test cases from selected test plans...');
+                            testPlanCaseIds = await AviatorShared.qase.fetchQaseCaseIdsForTestPlans(projectCode, selectedTestPlans);
+                        } catch (error) {
+                            console.warn('Error fetching test cases from selected test plans:', error);
+                            alert('Warning: Could not fetch test cases from some selected test plans.');
+                        }
+                    }
+
+                    const allCaseIds = AviatorShared.qase.mergeQaseCaseIds(qaseIdsList, testPlanCaseIds);
+
+                    const runData = {
+                        title: formData.title,
+                        caseIds: allCaseIds,
+                        testPlanCaseIds,
+                        jiraKey: formData.jiraKey,
+                        environment: formData.environment,
+                        milestone: formData.milestone,
+                        configurations: formData.configurations,
+                        tcBuilds: formData.tcBuilds,
+                        selectedTestPlans: selectedTestPlans,
+                        source: options?.source
+                    };
+
+                    try {
+                        AviatorShared.html.showLoading('Creating test run...');
+                        await onCreateRun(runData);
+                        AviatorShared.html.hideLoading();
+                        closeModal();
+                    } catch (error) {
+                        AviatorShared.html.hideLoading();
+                        console.error('Error creating test run:', error);
+                        alert('Failed to create test run. See console for details.');
+                        if (createBtn) createBtn.disabled = false;
+                    }
+                });
+            }
+        },
+
         htmlTeamCityBuilds: function (tcBuildData) {
             const div = document.createElement('div');
             div.id = 'teamcity-builds-section';
-
             if (!tcBuildData || (!tcBuildData.flatBuilds?.length && !tcBuildData.projectStructure?.length)) {
                 return div;
             }
@@ -3755,7 +4204,7 @@ const AviatorShared = {
 // Aviator Workflow v1.0.0
 
 const Aviator = {
-    version: '1.6.1',
+    version: '1.6.2',
     versionKey: 'aviatorLastFeaturePopup',
 
     showFeaturePopup: function () {
@@ -3768,6 +4217,17 @@ const Aviator = {
             <div class="changelog-container">
 
                 <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.6.2</div>
+                    <div class="changelog-description">Feature flags, Jira comment notes, and comment accuracy improvements.</div>
+                    <ul class="changelog-feature-list">
+                        <li>New top-level window.aviator.options feature flags for enabling experimental or optional features</li>
+                        <li>Optional jiraCommentNotes flag adds a notes field to Aviator and includes those notes in the Jira comment</li>
+                        <li>Jira comments now correctly count selected test cases when users choose only test plans</li>
+                        <li>New epiciator and boardiator flags control whether those buttons appear in Jira</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry ">
                     <div class="changelog-version">v1.6.1</div>
                     <div class="changelog-text">UI styling tweeks for large Teamcity build tree.</div>
                 </div>
@@ -3869,6 +4329,7 @@ const Aviator = {
 
         return {
             title: common.title,
+            commentNotes: common.commentNotes,
             environment: common.environment,
             milestone: common.milestone,
             configurations: common.configurations,
@@ -3895,6 +4356,7 @@ const Aviator = {
         if (data.selectedTestPlanIds.length > 0) {
             try {
                 testPlanCaseIds = await AviatorShared.qase.fetchQaseCaseIdsForTestPlans(projectCode, data.selectedTestPlanIds);
+                data.testPlanCaseIds = testPlanCaseIds;
             } catch (error) {
                 console.warn('Error fetching test cases from selected test plans:', error);
             }
@@ -4045,6 +4507,7 @@ const Aviator = {
     showPopup: function (issueKey, plans, externalCases, qaseConfigData, tcBuildDetails) {
         AviatorShared.html.hidePopup();
         AviatorShared.createdRun = false; // reset for this popup session
+        const includeJiraCommentNotes = AviatorShared.configuration.isFeatureEnabled('jiraCommentNotes');
 
         if (!plans.length && !externalCases.length) {
             AviatorShared.html.showStatusModal([], {
@@ -4101,7 +4564,9 @@ const Aviator = {
             // column 2: Test Run Details with TeamCity builds included
             const column2 = document.createElement('div')
             column2.classList = 'popup-column'
-            column2.appendChild(AviatorShared.html.htmlTestRunDetails(qaseConfigData, []))
+            column2.appendChild(AviatorShared.html.htmlTestRunDetails(qaseConfigData, [], [], {
+                includeJiraCommentNotes
+            }))
 
             column2.appendChild(AviatorShared.html.htmlTeamCityBuilds(tcBuildDetails))
             popupBody.appendChild(column2)
@@ -4126,7 +4591,9 @@ const Aviator = {
             const column2 = document.createElement('div')
             column2.classList = 'popup-column'
             column2.style.flex = '1'
-            column2.appendChild(AviatorShared.html.htmlTestRunDetails(qaseConfigData, []))
+            column2.appendChild(AviatorShared.html.htmlTestRunDetails(qaseConfigData, [], [], {
+                includeJiraCommentNotes
+            }))
             popupBody.appendChild(column2)
 
             // column 3: TeamCity builds only (without wrapper div for standalone column)
@@ -4398,9 +4865,13 @@ const Traciator = {
         }
     },
 
-    showTraciator: function (traceabilityMapping, totalJiraKeys, totalTestCases, totalTestRuns, allDistinctTestCaseIds = []) {
+    showTraciator: function (traceabilityMapping, totalJiraKeys, totalTestCases, totalTestRuns, allDistinctTestCaseIds = [], options = {}) {
         AviatorShared.html.hidePopup();
         AviatorShared.jira.blockJiraShortcuts();
+
+        const toolName = options?.toolName || 'Traciator';
+        const toolVersion = options?.version || Traciator.version;
+        const showFeaturePopup = options?.showFeaturePopup !== false;
 
         const container = document.createElement('div');
         container.className = 'qasePopup traciator-report-popup';
@@ -4415,8 +4886,8 @@ const Traciator = {
         container.innerHTML = `
                 <div class="traciator-titlebar">
                     <div class="traciator-title">
-                        <h2>Traciator</h2>
-                        <small>v${Traciator.version}</small>
+                        <h2>${toolName}</h2>
+                        <small>v${toolVersion}</small>
                     </div>
                     <button id="closeTraceabilityModal" class="qase-icon-btn" type="button">&times;</button>
                 </div>
@@ -4575,7 +5046,7 @@ const Traciator = {
 
                     try {
                         await AviatorShared.util.singleFlight('Traciator.createTestRunFromTraceability', async () => {
-                            await Traciator.compileTestRunData(traceabilityMapping, allDistinctTestCaseIds);
+                            await Traciator.compileTestRunData(traceabilityMapping, allDistinctTestCaseIds, options);
                         });
                     } finally {
                         if (btn) btn.disabled = false;
@@ -4585,7 +5056,7 @@ const Traciator = {
         });
 
         // Show Traciator changelog once per version
-        if (AviatorShared.configuration.shouldShowFeaturePopup(Traciator.versionKey, Traciator.version)) {
+        if (showFeaturePopup && AviatorShared.configuration.shouldShowFeaturePopup(Traciator.versionKey, Traciator.version)) {
             // Delay slightly to ensure modal is fully rendered
             setTimeout(() => {
                 Traciator.showTraciatorFeaturePopup();
@@ -4869,7 +5340,7 @@ const Traciator = {
         return Traciator.exportTraceabilityToCSV(traceabilityMapping);
     },
 
-    compileTestRunData: async function (traceabilityMapping, allDistinctTestCaseIds = []) {
+    compileTestRunData: async function (traceabilityMapping, allDistinctTestCaseIds = [], options = {}) {
         // Use the complete set of distinct test case IDs from the traceability report
         let qaseIdsList;
 
@@ -4897,224 +5368,26 @@ const Traciator = {
         AviatorShared.html.hideLoading();
 
         // Show the test run configuration modal with Jira key selection
-        await Traciator.showTraceabilityTestRunModal(qaseIdsList, qaseConfigData, availableJiraKeys, traceabilityMapping);
+        await AviatorShared.html.showCreateTestRunModal(qaseIdsList, qaseConfigData, availableJiraKeys, {
+            source: options?.source || 'traciator',
+            defaultTitle: options?.defaultTitle,
+            sourceLabel: options?.sourceLabel || 'the traceability report',
+            onCreateRun: Traciator.createTraceabilityTestRunWithData
+        });
     },
 
     complileTestRunData: async function (traceabilityMapping, allDistinctTestCaseIds = []) {
         return Traciator.compileTestRunData(traceabilityMapping, allDistinctTestCaseIds);
     },
 
-    showTraceabilityTestRunModal: async function (qaseIdsList, qaseConfigData, availableJiraKeys = [], traceabilityMapping = {}) {
-        const projectCode = AviatorShared.configuration.getQaseProjectCode();
-
-        // Styles are injected into the shadow root by createShadowRootOverlay()
-
-        // Fetch all available test plans for the multi-select dropdown
-        let availableTestPlans = [];
-        try {
-            AviatorShared.html.showLoading('Fetching available test plans...');
-            availableTestPlans = await AviatorShared.qase.fetchQaseTestPlans();
-        } catch (error) {
-            console.warn('Could not fetch available test plans:', error);
-            // Continue without test plans - user can still use traceability test cases
-        }
-
-        // Add TeamCity builds if available
-        let tcBuildDetails = [];
-        let teamCityBuildsCount = 0;
-        if (window.aviator?.teamcity?.builds || window.aviator?.teamcity?.projects) {
-            try {
-                AviatorShared.html.showLoading('Fetching TeamCity builds...');
-                tcBuildDetails = await AviatorShared.teamcity.fetchAllTeamCityBuilds();
-
-                teamCityBuildsCount = AviatorShared.teamcity.countTeamCityBuilds(tcBuildDetails);
-            } catch (error) {
-                console.warn('Failed to fetch TeamCity build details:', error);
-                teamCityBuildsCount = 0;
-            }
-        }
-
-        // Hide loading now that all data is fetched
-        AviatorShared.html.hideLoading();
-
-        const {
-            overlay,
-            container,
-            body: popupBody,
-            close: closeModal
-        } = AviatorShared.html.openModal({
-            overlayId: 'qaseModalOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            modalBox: {
-                className: 'qasePopup',
-                id: 'qaseTestRunModal',
-                customStyles: {
-                    maxWidth: '800px',
-                    width: '90%',
-                    maxHeight: '85vh',
-                    justifyContent: 'flex-start',
-                    alignItems: 'stretch'
-                }
-            },
-            sections: {
-                headerHtml: `
-                <div class="popup-title">
-                    <h2>✅ Create Test Run</h2>
-                    <button id="qaseCloseBtn" class="qase-icon-btn qase-ml-auto">&times;</button>
-                </div>`,
-                footerHtml: `
-                <button id="qaseRunBtn" class="btn primary">✅ Create Test Run</button>
-                <button id="qaseCancelBtn" class="btn secondary">Cancel</button>
-            `
-            },
-            onClose: () => {
-                AviatorShared.html.hideLoading();
-            }
+    showTraceabilityTestRunModal: async function (qaseIdsList, qaseConfigData, availableJiraKeys = [], traceabilityMapping = {}, options = {}) {
+        // Backward-compatible wrapper; the modal is hosted in AviatorShared now.
+        return AviatorShared.html.showCreateTestRunModal(qaseIdsList, qaseConfigData, availableJiraKeys, {
+            ...options,
+            source: options?.source || 'traciator',
+            sourceLabel: options?.sourceLabel || 'the traceability report',
+            onCreateRun: Traciator.createTraceabilityTestRunWithData
         });
-
-        // Test cases summary section (full width)
-        const summaryWrap = document.createElement('div');
-        summaryWrap.className = 'qase-mt-10';
-        summaryWrap.style.marginBottom = '15px';
-
-        const summaryCard = document.createElement('div');
-        summaryCard.id = 'create-run-summary';
-        summaryCard.className = 'qase-card';
-
-        const summaryP = document.createElement('p');
-        summaryP.style.margin = '0';
-        summaryP.textContent = `This test run will include ${qaseIdsList.length} test cases identified from the traceability report.`;
-        // emphasize number with <strong> without style attributes
-        summaryP.innerHTML = `This test run will include <strong>${qaseIdsList.length} test cases</strong> identified from the traceability report.`;
-
-        summaryCard.appendChild(summaryP);
-        summaryWrap.appendChild(summaryCard);
-        container.insertBefore(summaryWrap, popupBody);
-
-        // Content body - will be configured based on TeamCity build count
-        popupBody.style.display = 'flex';
-        popupBody.style.flex = '1';
-        popupBody.style.overflow = 'hidden';
-
-        // Adjust modal width based on layout (now that we know the build count)
-        if (teamCityBuildsCount > 0) {
-            Object.assign(container.style, {
-                maxWidth: '1200px',
-                width: '95%'
-            });
-        }
-
-        // Determine layout based on TeamCity builds count
-
-        if (teamCityBuildsCount > 0) {
-            // Two column layout for Traciator when builds are available
-            // Column 1: Configuration only
-            const column1 = document.createElement('div');
-            column1.classList.add('popup-column');
-            column1.style.flex = '1';
-            const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
-            column1.appendChild(configElement);
-            popupBody.appendChild(column1);
-
-            // Column 2: TeamCity builds only (without wrapper div for standalone column)
-            const column2 = document.createElement('div');
-            column2.classList.add('popup-column');
-            column2.style.flex = '1';
-            const tcElement = AviatorShared.html.htmlTeamCityBuilds(tcBuildDetails, false);
-            column2.appendChild(tcElement);
-            popupBody.appendChild(column2);
-
-            // Force row layout immediately
-            popupBody.setAttribute('style', 'display: flex !important; flex-direction: row !important; gap: 20px !important; flex: 1 !important; overflow: hidden !important;');
-        } else {
-            // Single column layout when no TeamCity builds
-            // Single column: Configuration only
-            const column1 = document.createElement('div');
-            column1.classList.add('popup-column');
-            column1.style.flex = '1';
-            const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
-            column1.appendChild(configElement);
-            popupBody.appendChild(column1);
-
-            // Single column layout
-            popupBody.setAttribute('style', 'display: flex !important; flex-direction: column !important; flex: 1 !important; overflow: hidden !important;');
-        }
-
-
-
-        // overlay + container already mounted by openModal
-
-        // Set default title based on release page version
-        const runTitleInput = container.querySelector('#qaseRunTitle');
-        if (runTitleInput) {
-            const versionName = Traciator.extractVersionNameFromReleasePage();
-            runTitleInput.value = `${versionName} Release Verification`;
-        }
-
-        const { validate: validateRunTitle } = AviatorShared.validation.setupRunTitleValidation({
-            root: container,
-            minLength: 5
-        });
-
-        // Run button handler
-        const runBtn = container.querySelector('#qaseRunBtn');
-        if (runBtn) {
-            runBtn.addEventListener('click', async () => {
-                const createBtn = container.querySelector('#qaseRunBtn');
-                if (createBtn?.disabled) return;
-                if (createBtn) createBtn.disabled = true;
-                if (!validateRunTitle()) {
-                    if (runTitleInput) runTitleInput.focus();
-                    if (createBtn) createBtn.disabled = false;
-                    return;
-                }
-
-                const formData = AviatorShared.html.getTestRunFormData(container);
-                const selectedTestPlans = formData.selectedTestPlanIds;
-
-                // Get test cases from selected test plans
-                let testPlanCaseIds = [];
-                if (selectedTestPlans.length > 0) {
-                    try {
-                        AviatorShared.html.showLoading('Fetching test cases from selected test plans...');
-                        testPlanCaseIds = await AviatorShared.qase.fetchQaseCaseIdsForTestPlans(projectCode, selectedTestPlans);
-                    } catch (error) {
-                        console.warn('Error fetching test cases from selected test plans:', error);
-                        alert('Warning: Could not fetch test cases from some selected test plans.');
-                    }
-                }
-
-                // Combine traceability case IDs with test plan case IDs
-                const allCaseIds = AviatorShared.qase.mergeQaseCaseIds(qaseIdsList, testPlanCaseIds);
-
-                const runData = {
-                    title: formData.title,
-                    caseIds: allCaseIds,
-                    jiraKey: formData.jiraKey,
-                    environment: formData.environment,
-                    milestone: formData.milestone,
-                    configurations: formData.configurations,
-                    tcBuilds: formData.tcBuilds,
-                    selectedTestPlans: selectedTestPlans // Add selected test plans for tracking
-                };
-
-                try {
-                    AviatorShared.html.showLoading('Creating test run...');
-                    await Traciator.createTraceabilityTestRunWithData(runData);
-                    AviatorShared.html.hideLoading();
-                    closeModal();
-                    // Don't close the parent modal - let user decide if they want to stay or leave
-                } catch (error) {
-                    AviatorShared.html.hideLoading();
-                    console.error('Error creating test run:', error);
-                    alert('Failed to create test run. See console for details.');
-                    if (createBtn) createBtn.disabled = false;
-                }
-            });
-        }
     },
 
     createTraceabilityTestRunWithData: async function (runData) {
@@ -5141,7 +5414,8 @@ const Traciator = {
             const runId = runResult.id;
 
             // Send data to slack for usage tracking
-            await AviatorShared.slack.sendResultToSlack(runData, 'traciator');
+            const source = runData?.source || 'traciator';
+            await AviatorShared.slack.sendResultToSlack(runData, source);
 
             // Prepare summary for unified status modal
             const summary = {
@@ -5185,6 +5459,510 @@ const Traciator = {
                 }
             } else {
                 AviatorShared.html.showStatusModal([], { summary });
+            }
+        });
+    }
+}
+
+
+// === src\epiciator.js ===
+
+const Epiciator = {
+    version: '1.0.0',
+    versionKey: 'epiciatorLastFeaturePopup',
+
+    isEpicIssueContext: function () {
+        const issueTypeBtn = document.querySelector(
+            '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] ' +
+            '[data-testid="issue.views.issue-base.foundation.change-issue-type.button"]'
+        );
+
+        const label = issueTypeBtn?.getAttribute('aria-label') || '';
+        return label.trim() === 'Epic - Change work type';
+    },
+
+    scrapeChildIssueKeysFromEpicPage: async function ({ maxScrollPasses = 25, stablePasses = 3 } = {}) {
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        const keys = new Set();
+        let stable = 0;
+        let lastSize = 0;
+
+        const collect = () => {
+            const table = document.querySelector('table[aria-label="Work"][data-vc="issue-table"], table[aria-label="Work"]');
+            if (!table) return;
+
+            const anchors = table.querySelectorAll(
+                'a[data-testid="native-issue-table.common.ui.issue-cells.issue-key.issue-key-cell"], ' +
+                'a[href^="/browse/"]'
+            );
+
+            anchors.forEach(a => {
+                const text = (a.textContent || '').trim();
+                if (/^[A-Z][A-Z0-9]+-\d+$/i.test(text)) keys.add(text.toUpperCase());
+            });
+        };
+
+        // Best-effort: Jira virtualizes this table; scrolling loads more.
+        for (let pass = 0; pass < maxScrollPasses; pass++) {
+            collect();
+
+            if (keys.size === lastSize) stable++;
+            else stable = 0;
+
+            if (stable >= stablePasses) break;
+
+            lastSize = keys.size;
+
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' });
+            await sleep(450);
+        }
+
+        return Array.from(keys);
+    },
+
+    initEpiciator: async function () {
+        return AviatorShared.util.singleFlight('Epiciator.initEpiciator', async () => {
+            if (!AviatorShared.configuration.checkQaseApiToken() || !AviatorShared.configuration.checkQaseProjectCode()) return;
+
+            /** check qase connection to verify can show the popup */
+            if (await AviatorShared.qase.verifyConnectToQase()) {
+                AviatorShared.html.hideLoading();
+                AviatorShared.html.showStatusModal([], {
+                    notification: { message: 'Error connecting to Qase. Check your token and project are correct', type: 'error' },
+                    onClose: AviatorShared.html.hidePopup
+                });
+                return;
+            }
+
+            if (!Epiciator.isEpicIssueContext()) {
+                AviatorShared.html.showStatusModal([], {
+                    notification: { message: 'Epiciator only runs on Jira Epic pages.', type: 'warning' },
+                    onClose: AviatorShared.html.hidePopup
+                });
+                return;
+            }
+
+            const projectCode = AviatorShared.configuration.getQaseProjectCode();
+            const { issueKey, issueTitle } = AviatorShared.configuration.getJiraIssueDetails();
+
+            AviatorShared.html.showLoading('Finding Epic child work items...');
+            const childKeys = await Epiciator.scrapeChildIssueKeysFromEpicPage();
+
+            if (!childKeys || childKeys.length === 0) {
+                AviatorShared.html.hideLoading();
+                AviatorShared.html.showStatusModal([], {
+                    notification: { message: 'No child work items found in the Epic Work table.', type: 'warning' },
+                    onClose: AviatorShared.html.hidePopup
+                });
+                return;
+            }
+
+            AviatorShared.html.showLoading(`Found ${childKeys.length} child items. Fetching Qase test cases...`);
+            const testCases = await AviatorShared.qase.fetchTestCasesForJiraKeys(projectCode, childKeys);
+
+            const distinctCaseIds = Array.from(
+                new Set((testCases || []).map(tc => tc?.id).filter(id => id != null && !isNaN(id) && id > 0))
+            );
+
+            if (distinctCaseIds.length === 0) {
+                AviatorShared.html.hideLoading();
+                AviatorShared.html.showStatusModal([], {
+                    notification: { message: 'No Qase test cases linked to any Epic child work items.', type: 'warning' },
+                    onClose: AviatorShared.html.hidePopup
+                });
+                return;
+            }
+
+            AviatorShared.html.showLoading('Fetching test run configuration...');
+            const qaseConfigData = await AviatorShared.qase.fetchQaseTestRunConfig();
+            AviatorShared.html.hideLoading();
+
+            const availableJiraKeys = issueKey
+                ? [{ key: issueKey, name: issueTitle || 'Epic' }]
+                : [];
+
+            await AviatorShared.html.showCreateTestRunModal(
+                distinctCaseIds,
+                qaseConfigData,
+                availableJiraKeys,
+                {
+                    source: 'epiciator',
+                    defaultTitle: issueKey ? `${issueKey} Epic Verification` : undefined,
+                    sourceLabel: `Epic child work items (${childKeys.length})`,
+                    onCreateRun: Traciator.createTraceabilityTestRunWithData
+                }
+            );
+
+            if (AviatorShared.configuration.shouldShowFeaturePopup(Epiciator.versionKey, Epiciator.version)) {
+                setTimeout(() => {
+                    Epiciator.showEpiciatorFeaturePopup();
+                }, 50);
+            }
+        });
+    },
+
+    showEpiciatorFeaturePopup: function () {
+        const box = AviatorShared.html.createModalBox({
+            className: 'qasePopup',
+            id: 'qaseEpiciatorChangelog',
+            maxWidth: '600px',
+            customStyles: {
+                width: 'auto',
+                justifyContent: 'center',
+                alignItems: 'center'
+            }
+        });
+
+        box.innerHTML = `
+            <h2 class="qase-mt-0">🧩 Epiciator Changelog 🧩</h2>
+            <div class="changelog-container">
+
+                <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.0.0</div>
+                    <div class="changelog-description">Initial Epiciator release for Jira Epic pages.</div>
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">Core Features</div>
+                    <ul class="changelog-feature-list">
+                        <li>Scrape child work items directly from the Epic Work table</li>
+                        <li>Collect linked Qase test cases across all Epic children</li>
+                        <li>Create a consolidated Qase test run for the Epic</li>
+                        <li>Prefill the run title using the current Epic key</li>
+                        <li>Reuse the shared test run configuration and TeamCity options</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">How to use</div>
+                    <div class="changelog-text">Open a Jira Epic and click the 🧩 Epiciator button to build a test run from its child work items.</div>
+                </div>
+                        </div>
+                            <button id="epiciator-feature-ok" class="btn primary qase-mt-10">Got it</button>
+            `;
+
+        AviatorShared.html.openModal({
+            overlayId: 'qaseEpiciatorFeatureOverlay',
+            zIndex: '999999',
+            mountHost: 'body',
+            closeOnOverlayClick: false,
+            closeOnEscape: false,
+            closeSelectors: ['#epiciator-feature-ok'],
+            container: box,
+            useSections: false
+        });
+    },
+
+}
+
+
+// === src\boardiator.js ===
+
+const Boardiator = {
+    version: '1.0.0',
+    versionKey: 'boardiatorLastFeaturePopup',
+
+    showBoardiatorFeaturePopup: function () {
+        const box = AviatorShared.html.createModalBox({
+            className: 'qasePopup',
+            id: 'qaseBoardiatorChangelog',
+            maxWidth: '600px',
+            customStyles: {
+                width: 'auto',
+                justifyContent: 'center',
+                alignItems: 'center'
+            }
+        });
+
+        box.innerHTML = `
+            <h2 class="qase-mt-0">📋 Boardiator Changelog 📋</h2>
+            <div class="changelog-container">
+
+                <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.0.0</div>
+                    <div class="changelog-description">Initial Boardiator release for Jira board traceability reporting.</div>
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">Core Features</div>
+                    <ul class="changelog-feature-list">
+                        <li>Scrape Jira work items directly from the active board.</li>
+                        <li>Build traceability coverage using linked Qase test cases and recent test runs.</li>
+                        <li>Open the full report in the existing Traciator coverage view.</li>
+                        <li>Create follow-up test runs from the generated board coverage data.</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
+                    <div class="changelog-version">How to use</div>
+                    <div class="changelog-text">Open a Jira board and click the 📋 Boardiator button to generate a verification report for the work currently visible on the board.</div>
+                </div>
+            </div>
+            <button id="boardiator-feature-ok" class="btn primary qase-mt-10">Got it</button>
+        `;
+
+        AviatorShared.html.openModal({
+            overlayId: 'qaseBoardiatorFeatureOverlay',
+            zIndex: '999999',
+            mountHost: 'body',
+            closeOnOverlayClick: false,
+            closeOnEscape: false,
+            closeSelectors: ['#boardiator-feature-ok'],
+            container: box,
+            useSections: false
+        });
+    },
+
+    isBoardContext: function () {
+        return /\/jira\/software\/c\/projects\/[^\/]+\/boards\/\d+/i.test(window.location.pathname);
+    },
+
+    getBoardMetadata: function () {
+        const match = window.location.pathname.match(/\/jira\/software\/c\/projects\/([^\/]+)\/boards\/(\d+)/i);
+        const projectKey = match?.[1] || null;
+        const boardId = match?.[2] || null;
+        const rawTitle = (document.title || '').replace(/\s*-\s*Jira\s*$/i, '').trim();
+
+        return {
+            projectKey,
+            boardId,
+            boardTitle: rawTitle || (projectKey && boardId ? `${projectKey} Board ${boardId}` : 'Board')
+        };
+    },
+
+    extractIssueFromCard: function (card) {
+        if (!card) return null;
+
+        const keyFromId = card.id && /^[A-Z][A-Z0-9]+-\d+$/i.test(card.id.replace(/^card-/, ''))
+            ? card.id.replace(/^card-/, '').toUpperCase()
+            : null;
+
+        const keyAnchor = card.querySelector('a[href*="/browse/"]');
+        const keyFromAnchor = keyAnchor
+            ? ((keyAnchor.textContent || '').trim().match(/^[A-Z][A-Z0-9]+-\d+$/i) ? (keyAnchor.textContent || '').trim().toUpperCase() : null)
+            : null;
+
+        const ariaButton = card.querySelector('[data-testid="platform-card.ui.card.focus-container"]');
+        const keyFromAria = ariaButton?.getAttribute('aria-label')?.match(/\b([A-Z][A-Z0-9]+-\d+)\b/i)?.[1]?.toUpperCase() || null;
+
+        const key = keyFromId || keyFromAnchor || keyFromAria;
+        if (!key) return null;
+
+        const titleNode = card.querySelector(
+            '[data-testid="issue-field-single-line-text-readview-card.ui.single-line-text.container.box"]'
+        );
+
+        const rawTitle = (titleNode?.textContent || '').trim();
+        const ariaLabel = (ariaButton?.getAttribute('aria-label') || '').trim();
+        const fallbackTitle = ariaLabel
+            .replace(new RegExp(`^${key}\\s+`, 'i'), '')
+            .replace(/\.\s*Use the enter key to load the work item\.?$/i, '')
+            .trim();
+        const title = rawTitle || fallbackTitle;
+
+        return {
+            key,
+            name: title || key,
+            title: title || key
+        };
+    },
+
+    scrollBoardContainers: function () {
+        const selectors = [
+            '[data-testid="software-board.board-container.board.virtual-board.fast-virtual-list.fast-virtual-list-wrapper"]',
+            '[data-testid*="software-board.board-container"]',
+            '[data-testid*="platform-board-kit"]'
+        ];
+
+        const seen = new Set();
+        const candidates = [];
+
+        selectors.forEach((selector) => {
+            document.querySelectorAll(selector).forEach((element) => {
+                let current = element;
+                for (let depth = 0; current && depth < 3; depth++) {
+                    if (!seen.has(current) && current.scrollHeight > current.clientHeight + 20) {
+                        seen.add(current);
+                        candidates.push(current);
+                    }
+                    current = current.parentElement;
+                }
+            });
+        });
+
+        candidates.forEach((element) => {
+            const nextTop = Math.min(element.scrollTop + Math.max(element.clientHeight - 80, 120), element.scrollHeight);
+            element.scrollTop = nextTop;
+        });
+
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' });
+
+        return candidates.length;
+    },
+
+    scrapeBoardIssues: async function ({ maxScrollPasses = 30, stablePasses = 4 } = {}) {
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+        const issues = new Map();
+        let stable = 0;
+        let lastSize = 0;
+
+        const collect = () => {
+            const cards = document.querySelectorAll('[data-testid="platform-board-kit.ui.card.card"]');
+            cards.forEach((card) => {
+                const issue = Boardiator.extractIssueFromCard(card);
+                if (!issue) return;
+
+                const existing = issues.get(issue.key);
+                if (!existing || existing.title === existing.key) {
+                    issues.set(issue.key, issue);
+                }
+            });
+        };
+
+        for (let pass = 0; pass < maxScrollPasses; pass++) {
+            collect();
+
+            if (issues.size === lastSize) stable++;
+            else stable = 0;
+
+            if (stable >= stablePasses) break;
+
+            lastSize = issues.size;
+            Boardiator.scrollBoardContainers();
+            await sleep(350);
+        }
+
+        return Array.from(issues.values()).sort((left, right) => left.key.localeCompare(right.key, undefined, { numeric: true }));
+    },
+
+    collectDistinctTestCaseIds: function (testCases, testRuns) {
+        const allDistinctTestCaseIds = new Set();
+
+        (testCases || []).forEach((testCase) => {
+            if (testCase?.id) allDistinctTestCaseIds.add(testCase.id);
+        });
+
+        (testRuns || []).forEach((testRun) => {
+            if (testRun.cases && Array.isArray(testRun.cases)) {
+                if (testRun.cases.length > 0 && typeof testRun.cases[0] === 'object') {
+                    testRun.cases.forEach((caseItem) => {
+                        const caseId = caseItem.case_id || caseItem.id;
+                        if (caseId) allDistinctTestCaseIds.add(caseId);
+                    });
+                } else {
+                    testRun.cases.forEach((caseId) => {
+                        if (caseId) allDistinctTestCaseIds.add(caseId);
+                    });
+                }
+            } else if (testRun.case_ids && Array.isArray(testRun.case_ids)) {
+                testRun.case_ids.forEach((caseId) => {
+                    if (caseId) allDistinctTestCaseIds.add(caseId);
+                });
+            }
+        });
+
+        return Array.from(allDistinctTestCaseIds);
+    },
+
+    initBoardiator: async function () {
+        return AviatorShared.util.singleFlight('Boardiator.initBoardiator', async () => {
+            if (!AviatorShared.configuration.checkQaseApiToken() || !AviatorShared.configuration.checkQaseProjectCode()) return;
+
+            if (await AviatorShared.qase.verifyConnectToQase()) {
+                AviatorShared.html.hideLoading();
+                AviatorShared.html.showStatusModal([], {
+                    notification: { message: 'Error connecting to Qase. Check your token and project are correct', type: 'error' },
+                    onClose: AviatorShared.html.hidePopup
+                });
+                return;
+            }
+
+            if (!Boardiator.isBoardContext()) {
+                AviatorShared.html.showStatusModal([], {
+                    notification: { message: 'Boardiator only runs on Jira board pages.', type: 'warning' },
+                    onClose: AviatorShared.html.hidePopup
+                });
+                return;
+            }
+
+            const projectCode = AviatorShared.configuration.getQaseProjectCode();
+            const boardMetadata = Boardiator.getBoardMetadata();
+
+            window.qaseProgressCallback = (message, progress) => {
+                AviatorShared.html.showLoading(message, progress);
+            };
+            window.qaseTrackChunks = false;
+
+            AviatorShared.html.showLoading('Starting board traceability report...', { current: 0, total: 4 });
+
+            try {
+                AviatorShared.html.showLoading('Scraping Jira keys from board...', { current: 1, total: 4 });
+                const boardIssues = await Boardiator.scrapeBoardIssues();
+
+                if (!boardIssues.length) {
+                    delete window.qaseProgressCallback;
+                    delete window.qaseTrackChunks;
+                    AviatorShared.html.hideLoading();
+                    AviatorShared.html.showStatusModal([], {
+                        notification: { message: 'No Jira work items found on this board.', type: 'warning' },
+                        onClose: AviatorShared.html.hidePopup
+                    });
+                    return;
+                }
+
+                const jiraKeys = boardIssues.map((item) => item.key);
+
+                AviatorShared.html.showLoading(`Found ${jiraKeys.length} Jira keys. Fetching test cases...`, { current: 2, total: 4 });
+                const testCases = await AviatorShared.qase.fetchTestCasesForJiraKeys(projectCode, jiraKeys);
+
+                AviatorShared.html.showLoading(`Found ${testCases.length} test cases. Preparing to fetch test runs...`, { current: 3, total: 4 });
+                window.qaseTrackChunks = true;
+
+                const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                const testRuns = await AviatorShared.qase.fetchTestRunsWithPagination(projectCode, thirtyDaysAgo, jiraKeys);
+
+                window.qaseTrackChunks = false;
+                AviatorShared.html.showLoading('Building traceability mapping...', { current: 4, total: 4 });
+
+                const traceabilityMapping = Traciator.buildTraceabilityMapping(testCases, testRuns, boardIssues);
+                const allDistinctTestCaseIds = Boardiator.collectDistinctTestCaseIds(testCases, testRuns);
+
+                delete window.qaseProgressCallback;
+                delete window.qaseTrackChunks;
+                AviatorShared.html.hideLoading();
+
+                Traciator.showTraciator(
+                    traceabilityMapping,
+                    boardIssues.length,
+                    allDistinctTestCaseIds.length,
+                    testRuns.length,
+                    allDistinctTestCaseIds,
+                    {
+                        toolName: 'Boardiator',
+                        version: Boardiator.version,
+                        showFeaturePopup: false,
+                        source: 'boardiator',
+                        defaultTitle: `${boardMetadata.boardTitle} Verification`,
+                        sourceLabel: `board work items (${jiraKeys.length})`
+                    }
+                );
+
+                if (AviatorShared.configuration.shouldShowFeaturePopup(Boardiator.versionKey, Boardiator.version)) {
+                    setTimeout(() => {
+                        Boardiator.showBoardiatorFeaturePopup();
+                    }, 50);
+                }
+            } catch (error) {
+                delete window.qaseProgressCallback;
+                delete window.qaseTrackChunks;
+                AviatorShared.html.hideLoading();
+                console.error('Error generating board traceability report:', error);
+                AviatorShared.html.showStatusModal([], {
+                    notification: { message: 'Error generating board traceability report. Check console for details.', type: 'error' },
+                    onClose: AviatorShared.html.hidePopup
+                });
             }
         });
     }

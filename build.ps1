@@ -12,7 +12,9 @@ Write-Host "Building Aviator..." -ForegroundColor Cyan
 $sourceFiles = @(
     "src\shared.js",
     "src\aviator.js", 
-    "src\traciator.js"
+    "src\traciator.js",
+    "src\epiciator.js",
+    "src\boardiator.js"
 )
 
 $outputFile = "aviator.js"
@@ -107,6 +109,8 @@ $checks = @{
     "AviatorShared" = $content -match "const AviatorShared"
     "Aviator" = $content -match "const Aviator"
     "Traciator" = $content -match "const Traciator"
+    "Epiciator" = $content -match "const Epiciator"
+    "Boardiator" = $content -match "const Boardiator"
     "addAviatorTools" = $content -match "addAviatorTools"
 }
 
