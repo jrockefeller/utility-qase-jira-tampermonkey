@@ -54,7 +54,7 @@ A Tampermonkey script to consolidate Jira + Qase + Teamcity to present users a m
 (async () => {
     // --- User local config ---
     window.aviator = {
-        options: {
+        features: {
             jiraCommentNotes: false,
             epiciator: false,
             boardiator: false
@@ -198,7 +198,7 @@ Configuration for Qase test management integration.
 **Example – Qase only**
 ```javascript
 window.aviator = {
-    options: {
+    features: {
         jiraCommentNotes: false,
         epiciator: false,
         boardiator: false
@@ -212,7 +212,7 @@ window.aviator = {
 **Example – Qase with custom title**
 ```javascript
 window.aviator = {
-    options: {
+    features: {
         jiraCommentNotes: false,
         epiciator: false,
         boardiator: false
@@ -227,7 +227,7 @@ window.aviator = {
 **Example – Qase with options**
 ```javascript
 window.aviator = {
-    options: {
+    features: {
         jiraCommentNotes: true,
         epiciator: true,
         boardiator: true
@@ -245,7 +245,7 @@ window.aviator = {
 };
 ```
 
-### **`options`** (Optional)
+### **`features`** (Optional)
 Top-level feature flags for Aviator UI and behavior. These default to `false` when the section or property is missing.
 
 | Property            | Type    | Default | Description |
@@ -269,7 +269,7 @@ Configuration for triggering TeamCity builds.
 **Example – Qase + TeamCity**
 ```javascript
 window.aviator = {
-    options: {
+    features: {
         jiraCommentNotes: false,
         epiciator: false,
         boardiator: false

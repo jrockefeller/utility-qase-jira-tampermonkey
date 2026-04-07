@@ -1535,7 +1535,7 @@ const AviatorShared = {
         },
 
         getFeatureOptions: function () {
-            return window.aviator?.options || {};
+            return window.aviator?.features || {};
         },
 
         isFeatureEnabled: function (featureName) {

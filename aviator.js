@@ -1,6 +1,6 @@
 ﻿// ==================================================
 // Aviator - Combined Build
-// Generated on 2026-04-03 10:55:03
+// Generated on 2026-04-07 08:44:33
 // This file replaces the module loader with combined code
 // ==================================================
 
@@ -1547,7 +1547,7 @@ const AviatorShared = {
         },
 
         getFeatureOptions: function () {
-            return window.aviator?.options || {};
+            return window.aviator?.features || {};
         },
 
         isFeatureEnabled: function (featureName) {
@@ -4220,7 +4220,7 @@ const Aviator = {
                     <div class="changelog-version">v1.6.2</div>
                     <div class="changelog-description">Feature flags, Jira comment notes, and comment accuracy improvements.</div>
                     <ul class="changelog-feature-list">
-                        <li>New top-level window.aviator.options feature flags for enabling experimental or optional features</li>
+                        <li>New top-level window.aviator.features flags for enabling experimental or optional features</li>
                         <li>Optional jiraCommentNotes flag adds a notes field to Aviator and includes those notes in the Jira comment</li>
                         <li>Jira comments now correctly count selected test cases when users choose only test plans</li>
                         <li>New epiciator and boardiator flags control whether those buttons appear in Jira</li>
