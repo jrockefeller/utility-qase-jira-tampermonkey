@@ -1,6 +1,6 @@
 ﻿// ==================================================
 // Aviator - Combined Build
-// Generated on 2026-04-07 08:44:33
+// Generated on 2026-05-13 10:32:04
 // This file replaces the module loader with combined code
 // ==================================================
 
@@ -648,6 +648,35 @@ const AviatorShared = {
         align-items: center;
     }
 
+    .qasePopup .multi-select-search-wrap {
+        padding: 8px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+
+    .qasePopup .multi-select-search {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0;
+        padding: 7px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-card);
+        color: var(--text);
+        font-size: 0.9rem;
+    }
+
+    .qasePopup .multi-select-empty {
+        display: none;
+        padding: 10px 12px;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        font-style: italic;
+    }
+
     /* Traciator report modal */
     .qasePopup.traciator-report-popup {
         max-width: 90vw;
@@ -1095,14 +1124,7 @@ const AviatorShared = {
             return btn;
         };
 
-        const isEpicIssueContext = () => {
-            const issueTypeBtn = document.querySelector(
-                '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] ' +
-                '[data-testid="issue.views.issue-base.foundation.change-issue-type.button"]'
-            );
-            const label = issueTypeBtn?.getAttribute('aria-label') || '';
-            return label.trim() === 'Epic - Change work type';
-        };
+        const isEpicIssueContext = () => AviatorShared.configuration.isEpicIssueContext();
 
         const isActiveBoardContext = (url = window.location.href) => {
             try {
@@ -1526,6 +1548,51 @@ const AviatorShared = {
             title = title.replace('{issueTitle}', jiraDetails.issueTitle);
 
             return title;
+        },
+
+        getCurrentJiraIssueTypeName: function () {
+            const candidates = [];
+
+            const issueTypeButton = document.querySelector(
+                '[data-testid="issue.views.issue-base.foundation.change-issue-type.button"]'
+            );
+
+            if (issueTypeButton) {
+                candidates.push(issueTypeButton.getAttribute('aria-label'));
+                candidates.push(issueTypeButton.getAttribute('title'));
+                candidates.push(issueTypeButton.textContent);
+
+                const nestedIcon = issueTypeButton.querySelector('img[alt], [role="img"][aria-label]');
+                if (nestedIcon) {
+                    candidates.push(nestedIcon.getAttribute('alt'));
+                    candidates.push(nestedIcon.getAttribute('aria-label'));
+                }
+            }
+
+            const breadcrumbIcon = document.querySelector(
+                '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] img[alt], ' +
+                '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] [role="img"][aria-label]'
+            );
+            if (breadcrumbIcon) {
+                candidates.push(breadcrumbIcon.getAttribute('alt'));
+                candidates.push(breadcrumbIcon.getAttribute('aria-label'));
+            }
+
+            const normalizedCandidates = candidates
+                .map(value => String(value || '').replace(/\s+/g, ' ').trim())
+                .filter(Boolean);
+
+            for (const candidate of normalizedCandidates) {
+                const match = candidate.match(/\b(Epic|Story|Task|Bug|Subtask|Sub-task)\b/i);
+                if (match) return match[1];
+            }
+
+            return null;
+        },
+
+        isEpicIssueContext: function () {
+            const issueTypeName = AviatorShared.configuration.getCurrentJiraIssueTypeName();
+            return typeof issueTypeName === 'string' && issueTypeName.trim().toLowerCase() === 'epic';
         },
 
         getJiraIssueDetails: function () {
@@ -3422,6 +3489,9 @@ const AviatorShared = {
                         <span class="dropdown-arrow">▼</span>
                     </button>
                     <div class="multi-select-options" id="${optionsId}">
+                        <div class="multi-select-search-wrap">
+                            <input type="text" class="multi-select-search" placeholder="Filter test plans..." aria-label="Filter test plans">
+                        </div>
                         ${plans.map(plan => {
                 const caseCount = plan.caseIds?.length || plan.cases_count || 0;
                 const qaseItemClass = includeQaseItemClass ? ' class="qase-item"' : '';
@@ -3436,6 +3506,7 @@ const AviatorShared = {
                                 </label>
                             `;
             }).join('')}
+                        <div class="multi-select-empty">No test plans match your filter.</div>
                     </div>
                 </div>
                 <small class="help-text">Select test plans to include their test cases in the run</small>
@@ -3445,12 +3516,36 @@ const AviatorShared = {
             const dropdownBtn = container.querySelector(`#${buttonId}`);
             const optionsContainer = container.querySelector(`#${optionsId}`);
             const selectionText = container.querySelector(`#${textId}`);
+            const searchInput = optionsContainer.querySelector('.multi-select-search');
+            const emptyState = optionsContainer.querySelector('.multi-select-empty');
+            const optionItems = Array.from(optionsContainer.querySelectorAll('.multi-select-option'));
 
             // Ensure a deterministic initial state (avoid first-click mis-detection)
             optionsContainer.style.display = 'none';
             dropdownBtn.setAttribute('data-open', 'false');
 
             let repositionAbort = null;
+
+            const applyFilter = () => {
+                const filterText = String(searchInput?.value || '').trim().toLowerCase();
+                let visibleCount = 0;
+
+                optionItems.forEach(option => {
+                    const title = String(option.querySelector('.plan-title')?.textContent || '').toLowerCase();
+                    const caseText = String(option.querySelector('.plan-cases')?.textContent || '').toLowerCase();
+                    const isMatch = !filterText || title.includes(filterText) || caseText.includes(filterText);
+
+                    option.style.display = isMatch ? 'flex' : 'none';
+                    if (isMatch) visibleCount++;
+                });
+
+                emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+            };
+
+            const resetFilter = () => {
+                if (searchInput) searchInput.value = '';
+                applyFilter();
+            };
 
             const updateDropdownPosition = () => {
                 const rect = dropdownBtn.getBoundingClientRect();
@@ -3471,6 +3566,7 @@ const AviatorShared = {
             const closeDropdown = () => {
                 optionsContainer.style.display = 'none';
                 dropdownBtn.setAttribute('data-open', 'false');
+                resetFilter();
                 if (repositionAbort) {
                     repositionAbort.abort();
                     repositionAbort = null;
@@ -3480,7 +3576,9 @@ const AviatorShared = {
             const openDropdown = () => {
                 optionsContainer.style.display = 'block';
                 dropdownBtn.setAttribute('data-open', 'true');
+                applyFilter();
                 updateDropdownPosition();
+                if (searchInput) searchInput.focus();
 
                 // Keep positioned correctly while scrolling/resizing
                 repositionAbort = new AbortController();
@@ -3528,6 +3626,17 @@ const AviatorShared = {
 
             // Handle checkbox changes and update selection text
             const checkboxes = optionsContainer.querySelectorAll('input[type="checkbox"]');
+
+            if (searchInput) {
+                searchInput.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+
+                searchInput.addEventListener('input', () => {
+                    applyFilter();
+                    updateDropdownPosition();
+                });
+            }
 
             function updateSelectionText() {
                 const selected = Array.from(checkboxes).filter(cb => cb.checked);
@@ -3792,7 +3901,9 @@ const AviatorShared = {
                 const column1 = document.createElement('div');
                 column1.classList.add('popup-column');
                 column1.style.flex = '1';
-                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
+                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans, {
+                    includeJiraCommentNotes: options?.includeJiraCommentNotes === true
+                });
                 column1.appendChild(configElement);
                 popupBody.appendChild(column1);
 
@@ -3808,7 +3919,9 @@ const AviatorShared = {
                 const column1 = document.createElement('div');
                 column1.classList.add('popup-column');
                 column1.style.flex = '1';
-                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
+                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans, {
+                    includeJiraCommentNotes: options?.includeJiraCommentNotes === true
+                });
                 column1.appendChild(configElement);
                 popupBody.appendChild(column1);
 
@@ -3863,6 +3976,7 @@ const AviatorShared = {
 
                     const runData = {
                         title: formData.title,
+                        commentNotes: formData.commentNotes,
                         caseIds: allCaseIds,
                         testPlanCaseIds,
                         jiraKey: formData.jiraKey,
@@ -4204,7 +4318,7 @@ const AviatorShared = {
 // Aviator Workflow v1.0.0
 
 const Aviator = {
-    version: '1.6.2',
+    version: '1.6.3',
     versionKey: 'aviatorLastFeaturePopup',
 
     showFeaturePopup: function () {
@@ -4217,6 +4331,17 @@ const Aviator = {
             <div class="changelog-container">
 
                 <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.6.3</div>
+                    <div class="changelog-description">Typeahead plan selection and cross-tool Jira/Qase workflow refinements.</div>
+                    <ul class="changelog-feature-list">
+                        <li>Test plan dropdowns now support typeahead filtering in create-run modals</li>
+                        <li>Epic detection is more resilient across Jira issue layouts and icon markup variants</li>
+                        <li>Epiciator now passes optional Jira comment notes through to created runs when that feature flag is enabled</li>
+                        <li>Traceability report runs now link directly to their Qase dashboard pages</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.6.2</div>
                     <div class="changelog-description">Feature flags, Jira comment notes, and comment accuracy improvements.</div>
                     <ul class="changelog-feature-list">
@@ -4227,7 +4352,7 @@ const Aviator = {
                     </ul>
                 </div>
 
-                <div class="changelog-entry ">
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.6.1</div>
                     <div class="changelog-text">UI styling tweeks for large Teamcity build tree.</div>
                 </div>
@@ -4681,7 +4806,7 @@ const Aviator = {
 // Traciator Workflow v1.0.0
 
 const Traciator = {
-    version: '1.1.1',
+    version: '1.1.2',
     versionKey: 'traciatorLastFeaturePopup',
 
     showTraciatorFeaturePopup: function () {
@@ -4701,6 +4826,15 @@ const Traciator = {
             <div class="changelog-container">
 
                 <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.1.2</div>
+                    <ul class="changelog-feature-list">
+                        <li>Traceability report run titles now link directly to the corresponding Qase run</li>
+                        <li>Shared test plan dropdowns in run creation now support typeahead filtering</li>
+                        <li>Matching Jira selections can carry optional Jira comment notes into the created run workflow</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.1.1</div>
                     <ul class="changelog-feature-list">
                         <li>UI styling tweeks for large Teamcity build tree.</li>
@@ -4872,6 +5006,7 @@ const Traciator = {
         const toolName = options?.toolName || 'Traciator';
         const toolVersion = options?.version || Traciator.version;
         const showFeaturePopup = options?.showFeaturePopup !== false;
+        const projectCode = options?.projectCode || AviatorShared.configuration.getQaseProjectCode();
 
         const container = document.createElement('div');
         container.className = 'qasePopup traciator-report-popup';
@@ -4984,9 +5119,15 @@ const Traciator = {
                     const title = run.title || `Run #${run.id}`;
                     const maxLength = 40;
                     const displayTitle = title.length > maxLength ? title.substring(0, maxLength - 3) + '...' : title;
+                    const runUrl = projectCode && run.id
+                        ? `https://app.qase.io/run/${projectCode}/dashboard/${run.id}`
+                        : null;
+                    const runTitleHtml = runUrl
+                        ? `<a href="${runUrl}" target="_blank" rel="noopener noreferrer">${displayTitle}</a>`
+                        : displayTitle;
 
                     return `<div class="traciator-run-item">
-                                <div id="testRun-${run.id}" class="traciator-run-title">${displayTitle} <span class="traciator-run-summary">${resultSummary}</span></div>
+                                <div id="testRun-${run.id}" class="traciator-run-title">${runTitleHtml} <span class="traciator-run-summary">${resultSummary}</span></div>
                             </div>`;
                 })
                 .join('');
@@ -5448,6 +5589,22 @@ const Traciator = {
                 }
             }
 
+            const { issueKey: currentIssueKey } = AviatorShared.configuration.getJiraIssueDetails();
+            const shouldCreateJiraComment = currentIssueKey
+                && runData.jiraKey
+                && currentIssueKey.toUpperCase() === runData.jiraKey.toUpperCase();
+
+            if (shouldCreateJiraComment) {
+                try {
+                    await AviatorShared.jira.createJiraComment(projectCode, runId, {
+                        ...runData,
+                        caseIds: validCaseIds
+                    });
+                } catch (commentError) {
+                    console.warn('Failed to create Jira comment for traceability run:', commentError);
+                }
+            }
+
             // Trigger any TeamCity builds (or show success-only modal when none)
             if (runData.tcBuilds && runData.tcBuilds.length > 0) {
                 try {
@@ -5468,17 +5625,11 @@ const Traciator = {
 // === src\epiciator.js ===
 
 const Epiciator = {
-    version: '1.0.0',
+    version: '1.0.1',
     versionKey: 'epiciatorLastFeaturePopup',
 
     isEpicIssueContext: function () {
-        const issueTypeBtn = document.querySelector(
-            '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] ' +
-            '[data-testid="issue.views.issue-base.foundation.change-issue-type.button"]'
-        );
-
-        const label = issueTypeBtn?.getAttribute('aria-label') || '';
-        return label.trim() === 'Epic - Change work type';
+        return AviatorShared.configuration.isEpicIssueContext();
     },
 
     scrapeChildIssueKeysFromEpicPage: async function ({ maxScrollPasses = 25, stablePasses = 3 } = {}) {
@@ -5582,6 +5733,8 @@ const Epiciator = {
                 ? [{ key: issueKey, name: issueTitle || 'Epic' }]
                 : [];
 
+            const includeJiraCommentNotes = AviatorShared.configuration.isFeatureEnabled('jiraCommentNotes');
+
             await AviatorShared.html.showCreateTestRunModal(
                 distinctCaseIds,
                 qaseConfigData,
@@ -5590,6 +5743,7 @@ const Epiciator = {
                     source: 'epiciator',
                     defaultTitle: issueKey ? `${issueKey} Epic Verification` : undefined,
                     sourceLabel: `Epic child work items (${childKeys.length})`,
+                    includeJiraCommentNotes,
                     onCreateRun: Traciator.createTraceabilityTestRunWithData
                 }
             );
@@ -5619,6 +5773,15 @@ const Epiciator = {
             <div class="changelog-container">
 
                 <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.0.1</div>
+                    <ul class="changelog-feature-list">
+                        <li>Epic detection is more robust across Jira page variants</li>
+                        <li>Optional Jira comment notes now flow into Epic-created test runs when enabled</li>
+                        <li>Shared test plan dropdowns now support typeahead filtering</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.0.0</div>
                     <div class="changelog-description">Initial Epiciator release for Jira Epic pages.</div>
                 </div>

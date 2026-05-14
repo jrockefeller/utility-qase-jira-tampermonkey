@@ -2,7 +2,7 @@
 // Traciator Workflow v1.0.0
 
 const Traciator = {
-    version: '1.1.1',
+    version: '1.1.2',
     versionKey: 'traciatorLastFeaturePopup',
 
     showTraciatorFeaturePopup: function () {
@@ -22,6 +22,15 @@ const Traciator = {
             <div class="changelog-container">
 
                 <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.1.2</div>
+                    <ul class="changelog-feature-list">
+                        <li>Traceability report run titles now link directly to the corresponding Qase run</li>
+                        <li>Shared test plan dropdowns in run creation now support typeahead filtering</li>
+                        <li>Matching Jira selections can carry optional Jira comment notes into the created run workflow</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.1.1</div>
                     <ul class="changelog-feature-list">
                         <li>UI styling tweeks for large Teamcity build tree.</li>
@@ -193,6 +202,7 @@ const Traciator = {
         const toolName = options?.toolName || 'Traciator';
         const toolVersion = options?.version || Traciator.version;
         const showFeaturePopup = options?.showFeaturePopup !== false;
+        const projectCode = options?.projectCode || AviatorShared.configuration.getQaseProjectCode();
 
         const container = document.createElement('div');
         container.className = 'qasePopup traciator-report-popup';
@@ -305,9 +315,15 @@ const Traciator = {
                     const title = run.title || `Run #${run.id}`;
                     const maxLength = 40;
                     const displayTitle = title.length > maxLength ? title.substring(0, maxLength - 3) + '...' : title;
+                    const runUrl = projectCode && run.id
+                        ? `https://app.qase.io/run/${projectCode}/dashboard/${run.id}`
+                        : null;
+                    const runTitleHtml = runUrl
+                        ? `<a href="${runUrl}" target="_blank" rel="noopener noreferrer">${displayTitle}</a>`
+                        : displayTitle;
 
                     return `<div class="traciator-run-item">
-                                <div id="testRun-${run.id}" class="traciator-run-title">${displayTitle} <span class="traciator-run-summary">${resultSummary}</span></div>
+                                <div id="testRun-${run.id}" class="traciator-run-title">${runTitleHtml} <span class="traciator-run-summary">${resultSummary}</span></div>
                             </div>`;
                 })
                 .join('');
@@ -766,6 +782,22 @@ const Traciator = {
                     console.warn('Failed to associate test run with Jira issue:', associationError);
                     summary.associationStatus = 'failed';
                     summary.associationMessage = `Warning: Could not associate with Jira issue ${runData.jiraKey}`;
+                }
+            }
+
+            const { issueKey: currentIssueKey } = AviatorShared.configuration.getJiraIssueDetails();
+            const shouldCreateJiraComment = currentIssueKey
+                && runData.jiraKey
+                && currentIssueKey.toUpperCase() === runData.jiraKey.toUpperCase();
+
+            if (shouldCreateJiraComment) {
+                try {
+                    await AviatorShared.jira.createJiraComment(projectCode, runId, {
+                        ...runData,
+                        caseIds: validCaseIds
+                    });
+                } catch (commentError) {
+                    console.warn('Failed to create Jira comment for traceability run:', commentError);
                 }
             }
 

@@ -2,7 +2,7 @@
 // Aviator Workflow v1.0.0
 
 const Aviator = {
-    version: '1.6.2',
+    version: '1.6.3',
     versionKey: 'aviatorLastFeaturePopup',
 
     showFeaturePopup: function () {
@@ -15,6 +15,17 @@ const Aviator = {
             <div class="changelog-container">
 
                 <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.6.3</div>
+                    <div class="changelog-description">Typeahead plan selection and cross-tool Jira/Qase workflow refinements.</div>
+                    <ul class="changelog-feature-list">
+                        <li>Test plan dropdowns now support typeahead filtering in create-run modals</li>
+                        <li>Epic detection is more resilient across Jira issue layouts and icon markup variants</li>
+                        <li>Epiciator now passes optional Jira comment notes through to created runs when that feature flag is enabled</li>
+                        <li>Traceability report runs now link directly to their Qase dashboard pages</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.6.2</div>
                     <div class="changelog-description">Feature flags, Jira comment notes, and comment accuracy improvements.</div>
                     <ul class="changelog-feature-list">
@@ -25,7 +36,7 @@ const Aviator = {
                     </ul>
                 </div>
 
-                <div class="changelog-entry ">
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.6.1</div>
                     <div class="changelog-text">UI styling tweeks for large Teamcity build tree.</div>
                 </div>

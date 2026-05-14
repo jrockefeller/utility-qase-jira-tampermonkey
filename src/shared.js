@@ -636,6 +636,35 @@ const AviatorShared = {
         align-items: center;
     }
 
+    .qasePopup .multi-select-search-wrap {
+        padding: 8px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+
+    .qasePopup .multi-select-search {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0;
+        padding: 7px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-card);
+        color: var(--text);
+        font-size: 0.9rem;
+    }
+
+    .qasePopup .multi-select-empty {
+        display: none;
+        padding: 10px 12px;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        font-style: italic;
+    }
+
     /* Traciator report modal */
     .qasePopup.traciator-report-popup {
         max-width: 90vw;
@@ -1083,14 +1112,7 @@ const AviatorShared = {
             return btn;
         };
 
-        const isEpicIssueContext = () => {
-            const issueTypeBtn = document.querySelector(
-                '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] ' +
-                '[data-testid="issue.views.issue-base.foundation.change-issue-type.button"]'
-            );
-            const label = issueTypeBtn?.getAttribute('aria-label') || '';
-            return label.trim() === 'Epic - Change work type';
-        };
+        const isEpicIssueContext = () => AviatorShared.configuration.isEpicIssueContext();
 
         const isActiveBoardContext = (url = window.location.href) => {
             try {
@@ -1514,6 +1536,51 @@ const AviatorShared = {
             title = title.replace('{issueTitle}', jiraDetails.issueTitle);
 
             return title;
+        },
+
+        getCurrentJiraIssueTypeName: function () {
+            const candidates = [];
+
+            const issueTypeButton = document.querySelector(
+                '[data-testid="issue.views.issue-base.foundation.change-issue-type.button"]'
+            );
+
+            if (issueTypeButton) {
+                candidates.push(issueTypeButton.getAttribute('aria-label'));
+                candidates.push(issueTypeButton.getAttribute('title'));
+                candidates.push(issueTypeButton.textContent);
+
+                const nestedIcon = issueTypeButton.querySelector('img[alt], [role="img"][aria-label]');
+                if (nestedIcon) {
+                    candidates.push(nestedIcon.getAttribute('alt'));
+                    candidates.push(nestedIcon.getAttribute('aria-label'));
+                }
+            }
+
+            const breadcrumbIcon = document.querySelector(
+                '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] img[alt], ' +
+                '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] [role="img"][aria-label]'
+            );
+            if (breadcrumbIcon) {
+                candidates.push(breadcrumbIcon.getAttribute('alt'));
+                candidates.push(breadcrumbIcon.getAttribute('aria-label'));
+            }
+
+            const normalizedCandidates = candidates
+                .map(value => String(value || '').replace(/\s+/g, ' ').trim())
+                .filter(Boolean);
+
+            for (const candidate of normalizedCandidates) {
+                const match = candidate.match(/\b(Epic|Story|Task|Bug|Subtask|Sub-task)\b/i);
+                if (match) return match[1];
+            }
+
+            return null;
+        },
+
+        isEpicIssueContext: function () {
+            const issueTypeName = AviatorShared.configuration.getCurrentJiraIssueTypeName();
+            return typeof issueTypeName === 'string' && issueTypeName.trim().toLowerCase() === 'epic';
         },
 
         getJiraIssueDetails: function () {
@@ -3410,6 +3477,9 @@ const AviatorShared = {
                         <span class="dropdown-arrow">▼</span>
                     </button>
                     <div class="multi-select-options" id="${optionsId}">
+                        <div class="multi-select-search-wrap">
+                            <input type="text" class="multi-select-search" placeholder="Filter test plans..." aria-label="Filter test plans">
+                        </div>
                         ${plans.map(plan => {
                 const caseCount = plan.caseIds?.length || plan.cases_count || 0;
                 const qaseItemClass = includeQaseItemClass ? ' class="qase-item"' : '';
@@ -3424,6 +3494,7 @@ const AviatorShared = {
                                 </label>
                             `;
             }).join('')}
+                        <div class="multi-select-empty">No test plans match your filter.</div>
                     </div>
                 </div>
                 <small class="help-text">Select test plans to include their test cases in the run</small>
@@ -3433,12 +3504,36 @@ const AviatorShared = {
             const dropdownBtn = container.querySelector(`#${buttonId}`);
             const optionsContainer = container.querySelector(`#${optionsId}`);
             const selectionText = container.querySelector(`#${textId}`);
+            const searchInput = optionsContainer.querySelector('.multi-select-search');
+            const emptyState = optionsContainer.querySelector('.multi-select-empty');
+            const optionItems = Array.from(optionsContainer.querySelectorAll('.multi-select-option'));
 
             // Ensure a deterministic initial state (avoid first-click mis-detection)
             optionsContainer.style.display = 'none';
             dropdownBtn.setAttribute('data-open', 'false');
 
             let repositionAbort = null;
+
+            const applyFilter = () => {
+                const filterText = String(searchInput?.value || '').trim().toLowerCase();
+                let visibleCount = 0;
+
+                optionItems.forEach(option => {
+                    const title = String(option.querySelector('.plan-title')?.textContent || '').toLowerCase();
+                    const caseText = String(option.querySelector('.plan-cases')?.textContent || '').toLowerCase();
+                    const isMatch = !filterText || title.includes(filterText) || caseText.includes(filterText);
+
+                    option.style.display = isMatch ? 'flex' : 'none';
+                    if (isMatch) visibleCount++;
+                });
+
+                emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+            };
+
+            const resetFilter = () => {
+                if (searchInput) searchInput.value = '';
+                applyFilter();
+            };
 
             const updateDropdownPosition = () => {
                 const rect = dropdownBtn.getBoundingClientRect();
@@ -3459,6 +3554,7 @@ const AviatorShared = {
             const closeDropdown = () => {
                 optionsContainer.style.display = 'none';
                 dropdownBtn.setAttribute('data-open', 'false');
+                resetFilter();
                 if (repositionAbort) {
                     repositionAbort.abort();
                     repositionAbort = null;
@@ -3468,7 +3564,9 @@ const AviatorShared = {
             const openDropdown = () => {
                 optionsContainer.style.display = 'block';
                 dropdownBtn.setAttribute('data-open', 'true');
+                applyFilter();
                 updateDropdownPosition();
+                if (searchInput) searchInput.focus();
 
                 // Keep positioned correctly while scrolling/resizing
                 repositionAbort = new AbortController();
@@ -3516,6 +3614,17 @@ const AviatorShared = {
 
             // Handle checkbox changes and update selection text
             const checkboxes = optionsContainer.querySelectorAll('input[type="checkbox"]');
+
+            if (searchInput) {
+                searchInput.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+
+                searchInput.addEventListener('input', () => {
+                    applyFilter();
+                    updateDropdownPosition();
+                });
+            }
 
             function updateSelectionText() {
                 const selected = Array.from(checkboxes).filter(cb => cb.checked);
@@ -3780,7 +3889,9 @@ const AviatorShared = {
                 const column1 = document.createElement('div');
                 column1.classList.add('popup-column');
                 column1.style.flex = '1';
-                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
+                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans, {
+                    includeJiraCommentNotes: options?.includeJiraCommentNotes === true
+                });
                 column1.appendChild(configElement);
                 popupBody.appendChild(column1);
 
@@ -3796,7 +3907,9 @@ const AviatorShared = {
                 const column1 = document.createElement('div');
                 column1.classList.add('popup-column');
                 column1.style.flex = '1';
-                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans);
+                const configElement = AviatorShared.html.htmlTestRunDetails(qaseConfigData, availableJiraKeys, availableTestPlans, {
+                    includeJiraCommentNotes: options?.includeJiraCommentNotes === true
+                });
                 column1.appendChild(configElement);
                 popupBody.appendChild(column1);
 
@@ -3851,6 +3964,7 @@ const AviatorShared = {
 
                     const runData = {
                         title: formData.title,
+                        commentNotes: formData.commentNotes,
                         caseIds: allCaseIds,
                         testPlanCaseIds,
                         jiraKey: formData.jiraKey,

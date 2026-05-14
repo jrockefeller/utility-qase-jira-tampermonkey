@@ -1,15 +1,9 @@
 const Epiciator = {
-    version: '1.0.0',
+    version: '1.0.1',
     versionKey: 'epiciatorLastFeaturePopup',
 
     isEpicIssueContext: function () {
-        const issueTypeBtn = document.querySelector(
-            '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"] ' +
-            '[data-testid="issue.views.issue-base.foundation.change-issue-type.button"]'
-        );
-
-        const label = issueTypeBtn?.getAttribute('aria-label') || '';
-        return label.trim() === 'Epic - Change work type';
+        return AviatorShared.configuration.isEpicIssueContext();
     },
 
     scrapeChildIssueKeysFromEpicPage: async function ({ maxScrollPasses = 25, stablePasses = 3 } = {}) {
@@ -113,6 +107,8 @@ const Epiciator = {
                 ? [{ key: issueKey, name: issueTitle || 'Epic' }]
                 : [];
 
+            const includeJiraCommentNotes = AviatorShared.configuration.isFeatureEnabled('jiraCommentNotes');
+
             await AviatorShared.html.showCreateTestRunModal(
                 distinctCaseIds,
                 qaseConfigData,
@@ -121,6 +117,7 @@ const Epiciator = {
                     source: 'epiciator',
                     defaultTitle: issueKey ? `${issueKey} Epic Verification` : undefined,
                     sourceLabel: `Epic child work items (${childKeys.length})`,
+                    includeJiraCommentNotes,
                     onCreateRun: Traciator.createTraceabilityTestRunWithData
                 }
             );
@@ -150,6 +147,15 @@ const Epiciator = {
             <div class="changelog-container">
 
                 <div class="changelog-entry featured">
+                    <div class="changelog-version">v1.0.1</div>
+                    <ul class="changelog-feature-list">
+                        <li>Epic detection is more robust across Jira page variants</li>
+                        <li>Optional Jira comment notes now flow into Epic-created test runs when enabled</li>
+                        <li>Shared test plan dropdowns now support typeahead filtering</li>
+                    </ul>
+                </div>
+
+                <div class="changelog-entry">
                     <div class="changelog-version">v1.0.0</div>
                     <div class="changelog-description">Initial Epiciator release for Jira Epic pages.</div>
                 </div>
