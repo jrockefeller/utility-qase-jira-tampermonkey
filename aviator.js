@@ -1,6 +1,6 @@
 ﻿// ==================================================
 // Aviator - Combined Build
-// Generated on 2026-06-26 08:24:13
+// Generated on 2026-06-26 09:49:11
 // This file replaces the module loader with combined code
 // ==================================================
 
@@ -1776,25 +1776,74 @@ const AviatorShared = {
 
     jira: {
         addQaseTestRunsToJiraUI: function () {
-            const qasePanel = document.querySelector('[data-testid="issue-view-ecosystem.connect.content-panel.qase.jira.cloud__qase-runs"]');
-            if (qasePanel) { // qase panel already exists; reload to see newly associated test run
+            const qasePanelSelectors = [
+                '[data-testid="issue-view-ecosystem.connect.content-panel.qase.jira.cloud__qase-runs"]',
+                '[data-testid*="qase"][data-testid*="runs"]'
+            ];
+
+            const hasVisibleQasePanel = () => qasePanelSelectors.some(sel => Boolean(document.querySelector(sel)));
+
+            if (hasVisibleQasePanel()) {
+                // qase panel already exists; reload to see newly associated test run
                 location.reload();
-            } else { // qase panel needs to be added
-                const appsDropdownBtn = document.querySelector('button[data-testid="issue-view-foundation.quick-add.quick-add-items-compact.apps-button-dropdown--trigger"]');
-                if (appsDropdownBtn) {
-                    appsDropdownBtn.click();
-                    setTimeout(() => {
-                        const qaseButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent.trim() === 'Qase: runs');
-                        if (qaseButton) {
-                            qaseButton.click();
-                        } else {
-                            console.warn('Qase button not found after opening dropdown.');
-                        }
-                    }, 500); // adjust delay as needed
-                } else {
-                    console.warn('Apps dropdown button not found.');
-                }
+                return;
             }
+
+            const appsTriggerSelectors = [
+                'button[data-testid="issue-view-foundation.quick-add.quick-add-items-compact.apps-button-dropdown--trigger"]',
+                'button[aria-label="Apps"]',
+                'button[aria-label*="Apps"]',
+                '[role="button"][aria-label*="Apps"]'
+            ];
+
+            const findAppsTrigger = () => {
+                for (const sel of appsTriggerSelectors) {
+                    const el = document.querySelector(sel);
+                    if (el) return el;
+                }
+
+                return Array.from(document.querySelectorAll('button,[role="button"]')).find((el) => {
+                    const text = (el.textContent || '').trim();
+                    return /^apps$/i.test(text);
+                }) || null;
+            };
+
+            const qaseRunsPattern = /^qase\s*:?\s*runs$/i;
+            const findQaseRunsAction = () => {
+                const dataTestIdMatch = document.querySelector('[data-testid*="qase"][data-testid*="runs"]');
+                if (dataTestIdMatch) return dataTestIdMatch;
+
+                return Array.from(document.querySelectorAll('button,[role="menuitem"],a')).find((el) => {
+                    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+                    return qaseRunsPattern.test(text);
+                }) || null;
+            };
+
+            const appsTrigger = findAppsTrigger();
+            if (!appsTrigger) {
+                console.warn('Apps dropdown button not found.');
+                return;
+            }
+
+            appsTrigger.click();
+
+            const maxAttempts = 8;
+            const attemptClickQaseRuns = (attempt = 0) => {
+                const qaseAction = findQaseRunsAction();
+                if (qaseAction) {
+                    qaseAction.click();
+                    return;
+                }
+
+                if (attempt >= maxAttempts) {
+                    console.warn('Qase runs action not found after opening Apps menu.');
+                    return;
+                }
+
+                setTimeout(() => attemptClickQaseRuns(attempt + 1), 250);
+            };
+
+            setTimeout(() => attemptClickQaseRuns(0), 150);
         },
 
         blockJiraShortcuts: function () {
@@ -4120,6 +4169,9 @@ const AviatorShared = {
                 }
             });
 
+            // Keep Jira keyboard shortcuts from firing while this modal is open.
+            AviatorShared.jira.blockJiraShortcuts();
+
             // Test cases summary section (full width)
             const summaryWrap = document.createElement('div');
             summaryWrap.className = 'qase-mt-10';
@@ -4190,6 +4242,16 @@ const AviatorShared = {
                 } else if (typeof Traciator !== 'undefined' && typeof Traciator.extractVersionNameFromReleasePage === 'function') {
                     const versionName = Traciator.extractVersionNameFromReleasePage();
                     if (versionName) runTitleInput.value = `${versionName} Release Verification`;
+                }
+            }
+
+            const jiraKeySelect = container.querySelector('#qaseJiraKey');
+            if (jiraKeySelect) {
+                const preferredJiraKey = options?.defaultJiraKey
+                    || (options?.source === 'epiciator' && availableJiraKeys.length === 1 ? availableJiraKeys[0]?.key : '');
+
+                if (preferredJiraKey && Array.from(jiraKeySelect.options).some(opt => opt.value === preferredJiraKey)) {
+                    jiraKeySelect.value = preferredJiraKey;
                 }
             }
 
@@ -5665,6 +5727,17 @@ const Traciator = {
                 && runData.jiraKey
                 && currentIssueKey.toUpperCase() === runData.jiraKey.toUpperCase();
 
+            const shouldRevealQaseRunsPanel = shouldCreateJiraComment
+                && summary.associationStatus === 'linked';
+
+            const handleStatusClose = shouldRevealQaseRunsPanel
+                ? () => {
+                    if (AviatorShared.html.shouldClosePopup()) {
+                        AviatorShared.jira.addQaseTestRunsToJiraUI();
+                    }
+                }
+                : null;
+
             if (shouldCreateJiraComment) {
                 try {
                     await AviatorShared.jira.createJiraComment(projectCode, runId, {
@@ -5679,14 +5752,14 @@ const Traciator = {
             // Trigger any TeamCity builds (or show success-only modal when none)
             if (runData.tcBuilds && runData.tcBuilds.length > 0) {
                 try {
-                    await AviatorShared.teamcity.triggerTeamCityBuilds(runId, validCaseIds, { summary });
+                    await AviatorShared.teamcity.triggerTeamCityBuilds(runId, validCaseIds, { summary, onClose: handleStatusClose });
                 } catch (error) {
                     console.warn('Failed to trigger TeamCity builds:', error);
                     // still show summary-only modal to confirm run creation
-                    AviatorShared.html.showStatusModal([], { summary });
+                    AviatorShared.html.showStatusModal([], { summary, onClose: handleStatusClose });
                 }
             } else {
-                AviatorShared.html.showStatusModal([], { summary });
+                AviatorShared.html.showStatusModal([], { summary, onClose: handleStatusClose });
             }
         });
     }
@@ -5812,6 +5885,7 @@ const Epiciator = {
                 {
                     source: 'epiciator',
                     defaultTitle: issueKey ? `${issueKey} Epic Verification` : undefined,
+                    defaultJiraKey: issueKey || undefined,
                     sourceLabel: `Epic child work items (${childKeys.length})`,
                     includeJiraCommentNotes,
                     onCreateRun: Traciator.createTraceabilityTestRunWithData

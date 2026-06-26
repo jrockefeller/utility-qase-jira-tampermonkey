@@ -115,6 +115,7 @@ const Epiciator = {
                 {
                     source: 'epiciator',
                     defaultTitle: issueKey ? `${issueKey} Epic Verification` : undefined,
+                    defaultJiraKey: issueKey || undefined,
                     sourceLabel: `Epic child work items (${childKeys.length})`,
                     includeJiraCommentNotes,
                     onCreateRun: Traciator.createTraceabilityTestRunWithData

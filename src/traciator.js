@@ -706,6 +706,17 @@ const Traciator = {
                 && runData.jiraKey
                 && currentIssueKey.toUpperCase() === runData.jiraKey.toUpperCase();
 
+            const shouldRevealQaseRunsPanel = shouldCreateJiraComment
+                && summary.associationStatus === 'linked';
+
+            const handleStatusClose = shouldRevealQaseRunsPanel
+                ? () => {
+                    if (AviatorShared.html.shouldClosePopup()) {
+                        AviatorShared.jira.addQaseTestRunsToJiraUI();
+                    }
+                }
+                : null;
+
             if (shouldCreateJiraComment) {
                 try {
                     await AviatorShared.jira.createJiraComment(projectCode, runId, {
@@ -720,14 +731,14 @@ const Traciator = {
             // Trigger any TeamCity builds (or show success-only modal when none)
             if (runData.tcBuilds && runData.tcBuilds.length > 0) {
                 try {
-                    await AviatorShared.teamcity.triggerTeamCityBuilds(runId, validCaseIds, { summary });
+                    await AviatorShared.teamcity.triggerTeamCityBuilds(runId, validCaseIds, { summary, onClose: handleStatusClose });
                 } catch (error) {
                     console.warn('Failed to trigger TeamCity builds:', error);
                     // still show summary-only modal to confirm run creation
-                    AviatorShared.html.showStatusModal([], { summary });
+                    AviatorShared.html.showStatusModal([], { summary, onClose: handleStatusClose });
                 }
             } else {
-                AviatorShared.html.showStatusModal([], { summary });
+                AviatorShared.html.showStatusModal([], { summary, onClose: handleStatusClose });
             }
         });
     }
