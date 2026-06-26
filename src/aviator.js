@@ -2,134 +2,10 @@
 // Aviator Workflow v1.0.0
 
 const Aviator = {
-    version: '1.6.3',
-    versionKey: 'aviatorLastFeaturePopup',
+    version: '2.0.0',
 
     showFeaturePopup: function () {
-        const box = AviatorShared.html.createModalBox({
-            id: 'aviator-changelog',
-        });
-
-        box.innerHTML = `
-            <h2 class="qase-mt-0">🚀 Aviator Changelog 🚀</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.6.3</div>
-                    <div class="changelog-description">Typeahead plan selection and cross-tool Jira/Qase workflow refinements.</div>
-                    <ul class="changelog-feature-list">
-                        <li>Test plan dropdowns now support typeahead filtering in create-run modals</li>
-                        <li>Epic detection is more resilient across Jira issue layouts and icon markup variants</li>
-                        <li>Epiciator now passes optional Jira comment notes through to created runs when that feature flag is enabled</li>
-                        <li>Traceability report runs now link directly to their Qase dashboard pages</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.6.2</div>
-                    <div class="changelog-description">Feature flags, Jira comment notes, and comment accuracy improvements.</div>
-                    <ul class="changelog-feature-list">
-                        <li>New top-level window.aviator.features flags for enabling experimental or optional features</li>
-                        <li>Optional jiraCommentNotes flag adds a notes field to Aviator and includes those notes in the Jira comment</li>
-                        <li>Jira comments now correctly count selected test cases when users choose only test plans</li>
-                        <li>New epiciator and boardiator flags control whether those buttons appear in Jira</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.6.1</div>
-                    <div class="changelog-text">UI styling tweeks for large Teamcity build tree.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.6.0</div>
-                    <div class="changelog-description">UI/UX improvements:</div>
-                    <ul class="changelog-feature-list">
-                        <li>Consolidate status message popup presentation.</li>
-                        <li>Selected Teamcity builds provide status information feedback.</li>
-                        <li>Robust Teamcity api error messaging.</li>
-                        <li>Unified Run Title validation experience.</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.5.0</div>
-                    <div class="changelog-description">Major UI/UX improvements:</div>
-                    <ul class="changelog-feature-list">
-                        <li>Optional Teamcity builds configuration to set a high level project to get a list of all subprojects/builds.
-                        <code class="changelog-inline-code">window.aviator.teamcity.projects = ['projectId']</code></li>
-                        <li>Dynamic Layout moves TeamCity Builds Section to a dedicated column for better usability when 4+ builds.</li>
-                        <li>Test Plan Dropdown presents all test plans for the Qase project. No longer have to link test plans in jira tickets.</li>
-                        <li>Build Parameters section to edit/clear any <code class="changelog-inline-code">window.aviator.teamcity.parameter</code>.</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4.4</div>
-                    <div class="changelog-text">Introducing Traciator v1.0.0! New traceability reporting tool with independent versioning.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4.3</div>
-                    <div class="changelog-text">Add Jira comment for every test run created.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4.2</div>
-                    <div class="changelog-text">Gracefully handle TeamCity build fetch errors. Display to user in modal.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4.1</div>
-                    <div class="changelog-text">Fixed issue with Jira sidebars not displaying Aviator button.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4</div>
-                    <div class="changelog-text">Consolidated error messaging. Handle incorrect configuration more gracefully.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.3</div>
-                    <div class="changelog-text">New <code class="changelog-inline-code">keep open</code> checkbox added to keep modal open for multiple test run creations.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.2</div>
-                    <div class="changelog-description">Configure custom parameters to send with TeamCity builds.</div>
-                    <div class="changelog-note">
-                        See <a href="https://github.com/jrockefeller/utility-qase-jira-tampermonkey/blob/main/README.md" target="_blank" class="changelog-link">README.md</a> for details.
-                    </div>
-                    <pre class="changelog-code-block">teamcity: {
-    parameters: [
-        { name: 'custom_param', value: '123' }
-    ]
-}</pre>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.1</div>
-                    <div class="changelog-text">Checkbox to send only selected QaseIds in TeamCity build parameter <code class="changelog-inline-code">env.QASE_IDS</code>.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.0</div>
-                    <div class="changelog-text">Aviator runs in <code class="changelog-inline-code">shadowRoot</code>! Isolates from Jira hot keys.</div>
-                </div>
-            </div>
-                            <button id="feature-ok" class="btn primary qase-mt-10">Got it</button>
-            `;
-
-        AviatorShared.html.openModal({
-            overlayId: 'qaseAviatorFeatureOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            closeSelectors: ['#feature-ok'],
-            container: box,
-            useSections: false
-        });
+        AviatorShared.changelog.showToolPopup('aviator');
     },
 
     getFormRunData: function () {
@@ -476,7 +352,7 @@ const Aviator = {
         });
 
         // then run feature popup once per version
-        if (AviatorShared.configuration.shouldShowFeaturePopup(Aviator.versionKey, Aviator.version)) {
+        if (AviatorShared.changelog.shouldShowToolPopup()) {
             Aviator.showFeaturePopup(AviatorShared.shadowRoot);
         }
     }

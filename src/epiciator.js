@@ -1,6 +1,5 @@
 const Epiciator = {
-    version: '1.0.1',
-    versionKey: 'epiciatorLastFeaturePopup',
+    version: '2.0.0',
 
     isEpicIssueContext: function () {
         return AviatorShared.configuration.isEpicIssueContext();
@@ -14,7 +13,7 @@ const Epiciator = {
         let lastSize = 0;
 
         const collect = () => {
-            const table = document.querySelector('table[aria-label="Work"][data-vc="issue-table"], table[aria-label="Work"]');
+            const table = document.querySelector('table[aria-label*="Work"][data-vc="issue-table"], table[aria-label*="Work"]');
             if (!table) return;
 
             const anchors = table.querySelectorAll(
@@ -122,7 +121,7 @@ const Epiciator = {
                 }
             );
 
-            if (AviatorShared.configuration.shouldShowFeaturePopup(Epiciator.versionKey, Epiciator.version)) {
+            if (AviatorShared.changelog.shouldShowToolPopup()) {
                 setTimeout(() => {
                     Epiciator.showEpiciatorFeaturePopup();
                 }, 50);
@@ -131,64 +130,7 @@ const Epiciator = {
     },
 
     showEpiciatorFeaturePopup: function () {
-        const box = AviatorShared.html.createModalBox({
-            className: 'qasePopup',
-            id: 'qaseEpiciatorChangelog',
-            maxWidth: '600px',
-            customStyles: {
-                width: 'auto',
-                justifyContent: 'center',
-                alignItems: 'center'
-            }
-        });
-
-        box.innerHTML = `
-            <h2 class="qase-mt-0">🧩 Epiciator Changelog 🧩</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.0.1</div>
-                    <ul class="changelog-feature-list">
-                        <li>Epic detection is more robust across Jira page variants</li>
-                        <li>Optional Jira comment notes now flow into Epic-created test runs when enabled</li>
-                        <li>Shared test plan dropdowns now support typeahead filtering</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.0.0</div>
-                    <div class="changelog-description">Initial Epiciator release for Jira Epic pages.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">Core Features</div>
-                    <ul class="changelog-feature-list">
-                        <li>Scrape child work items directly from the Epic Work table</li>
-                        <li>Collect linked Qase test cases across all Epic children</li>
-                        <li>Create a consolidated Qase test run for the Epic</li>
-                        <li>Prefill the run title using the current Epic key</li>
-                        <li>Reuse the shared test run configuration and TeamCity options</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">How to use</div>
-                    <div class="changelog-text">Open a Jira Epic and click the 🧩 Epiciator button to build a test run from its child work items.</div>
-                </div>
-                        </div>
-                            <button id="epiciator-feature-ok" class="btn primary qase-mt-10">Got it</button>
-            `;
-
-        AviatorShared.html.openModal({
-            overlayId: 'qaseEpiciatorFeatureOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            closeSelectors: ['#epiciator-feature-ok'],
-            container: box,
-            useSections: false
-        });
+        AviatorShared.changelog.showToolPopup('epiciator');
     },
 
 }

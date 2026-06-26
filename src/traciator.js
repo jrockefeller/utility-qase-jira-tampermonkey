@@ -2,94 +2,10 @@
 // Traciator Workflow v1.0.0
 
 const Traciator = {
-    version: '1.1.2',
-    versionKey: 'traciatorLastFeaturePopup',
+    version: '2.0.0',
 
     showTraciatorFeaturePopup: function () {
-        const box = AviatorShared.html.createModalBox({
-            className: 'qasePopup',
-            id: 'qaseTraciatorChangelog',
-            maxWidth: '600px',
-            customStyles: {
-                width: 'auto',
-                justifyContent: 'center',
-                alignItems: 'center'
-            }
-        });
-
-        box.innerHTML = `
-            <h2 class="qase-mt-0">🔍 Traciator Changelog 🔍</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.1.2</div>
-                    <ul class="changelog-feature-list">
-                        <li>Traceability report run titles now link directly to the corresponding Qase run</li>
-                        <li>Shared test plan dropdowns in run creation now support typeahead filtering</li>
-                        <li>Matching Jira selections can carry optional Jira comment notes into the created run workflow</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.1.1</div>
-                    <ul class="changelog-feature-list">
-                        <li>UI styling tweeks for large Teamcity build tree.</li>
-                        <li>Bugfix: Tracibility List handle jira key longer than 3 characters.</li>
-                    </ul>                   
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.1.0</div>
-                    <div class="changelog-description">Performance and Feedback:</div>
-                    <ul class="changelog-feature-list">
-                        <li>Consolidate status message popup presentation.</li>
-                        <li>Selected Teamcity builds provide status information feedback.</li>
-                        <li>Robust Teamcity api error messaging.</li>
-                        <li>Unified Run Title validation experience.</li>
-                        <li>Performant GET qase/runs by 40%</li>
-                    </ul>  
-                     <div class="changelog-description">Bugs:</div>
-                    <ul class="changelog-feature-list">
-                        <li>Test run modal shows total cases from all sources.</li>
-                        <li>Selected test plans included in created test run.</li>
-                    </ul>                   
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.0.0</div>
-                    <div class="changelog-description">Initial Traciator release! Generate comprehensive traceability reports from release pages.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">Core Features</div>
-                    <ul class="changelog-feature-list">
-                        <li>Visual test coverage mapping between Jira issues, test cases, and test runs</li>
-                        <li>Export detailed CSV reports for stakeholder analysis</li>
-                        <li>Create test runs directly from traceability data</li>
-                        <li>Real-time test run statistics and coverage indicators</li>
-                        <li>Smart filtering by specific Jira keys from release pages</li>
-                        <li>Distinct test case counting across multiple data sources</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">How to use</div>
-                    <div class="changelog-text">Navigate to any Jira release page and click the 🔍 Traciator button to generate your traceability report!</div>
-                </div>
-                        </div>
-                            <button id="traciator-feature-ok" class="btn primary qase-mt-10">Got it</button>
-            `;
-
-        AviatorShared.html.openModal({
-            overlayId: 'qaseTraciatorFeatureOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            closeSelectors: ['#traciator-feature-ok'],
-            container: box,
-            useSections: false
-        });
+        AviatorShared.changelog.showToolPopup('traciator');
     },
 
     initTraciator: async function () {
@@ -393,7 +309,7 @@ const Traciator = {
         });
 
         // Show Traciator changelog once per version
-        if (showFeaturePopup && AviatorShared.configuration.shouldShowFeaturePopup(Traciator.versionKey, Traciator.version)) {
+        if (showFeaturePopup && AviatorShared.changelog.shouldShowToolPopup()) {
             // Delay slightly to ensure modal is fully rendered
             setTimeout(() => {
                 Traciator.showTraciatorFeaturePopup();

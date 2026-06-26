@@ -1,6 +1,6 @@
 ﻿// ==================================================
 // Aviator - Combined Build
-// Generated on 2026-05-13 10:32:04
+// Generated on 2026-06-26 08:24:13
 // This file replaces the module loader with combined code
 // ==================================================
 
@@ -18,6 +18,90 @@ const AviatorShared = {
     shadowRoot: null,
     createdRun: false,
     _inFlight: {},
+    changelog: {
+        sharedVersion: '2.0.0',
+        sharedVersionKey: 'qasiatorToolsLastFeaturePopup',
+        combinedEntriesHtml: `
+                <div class="changelog-entry">
+                    <div class="changelog-version">Qasiator Tools v1.0.0</div>
+                    <div class="changelog-description">Consolidated historical release notes across all tools.</div>
+                    <ul class="changelog-feature-list">
+                        <li><span class="changelog-tool-tag is-global">global</span> ShadowRoot-based modals, consolidated status messaging, and broader Jira compatibility improvements landed across the toolset.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> Core test run creation gained keep-open support, TeamCity build triggering, selected Qase ID forwarding, and Jira association feedback.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> TeamCity integration expanded with project-level build discovery, editable build parameters, stronger error handling, improved large-tree UI, and split-column modal layouts.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> Qase run setup added project-wide test plan selection, feature flags, optional Jira comment notes, and typeahead plan filtering.</li>
+                        <li><span class="changelog-tool-tag is-traciator">traciator</span> Release-page traceability reporting added CSV export, distinct case counting, run creation from traceability data, and faster run retrieval.</li>
+                        <li><span class="changelog-tool-tag is-traciator">traciator</span> Traceability workflows improved with better TeamCity feedback, long Jira key handling, linked Qase run titles, optional Jira comment notes, and typeahead plan filtering.</li>
+                        <li><span class="changelog-tool-tag is-epiciator">epiciator</span> Epic workflows added child issue scraping, Qase case aggregation, shared run creation, stronger Epic detection, optional Jira comment notes, and typeahead plan filtering.</li>
+                        <li><span class="changelog-tool-tag is-boardiator">boardiator</span> Board workflows added board issue scraping, traceability reporting from board contents, and follow-up test run creation from board results.</li>
+                    </ul>
+                </div>
+        `,
+
+        getSharedEntryHtml: function () {
+            return `
+                <div class="changelog-entry featured">
+                    <div class="changelog-version">Qasiator Tools Changelog v${AviatorShared.changelog.sharedVersion}</div>
+                    <div class="changelog-description">Unified versioning and a single combined changelog for the full toolset.</div>
+                    <ul class="changelog-feature-list">
+                        <li><span class="changelog-tool-tag is-global">global</span> Qasiator Tools now uses one shared changelog modal and one shared release version across Aviator, Traciator, Epiciator, and Boardiator.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> TeamCity parameter configuration now supports <code class="changelog-inline-code">window.aviator.teamcity.parameters[].type</code> with <code class="changelog-inline-code">env</code> and <code class="changelog-inline-code">configuration</code>.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> Empty TeamCity parameter types still default to <code class="changelog-inline-code">env</code>, and invalid values now block the modal with an error.</li>
+                        <li><span class="changelog-tool-tag is-traciator">traciator</span> Traciator now participates in the shared 2.0.0 release and surfaces its history through the unified changelog modal.</li>
+                        <li><span class="changelog-tool-tag is-epiciator">epiciator</span> Epiciator now participates in the shared 2.0.0 release and surfaces its history through the unified changelog modal.</li>
+                        <li><span class="changelog-tool-tag is-boardiator">boardiator</span> Boardiator now participates in the shared 2.0.0 release and surfaces its history through the unified changelog modal.</li>
+                    </ul>
+                </div>
+            `;
+        },
+
+        getCombinedEntriesHtml: function () {
+            return AviatorShared.changelog.combinedEntriesHtml;
+        },
+
+        shouldShowToolPopup: function () {
+            return AviatorShared.configuration.shouldShowFeaturePopup(
+                AviatorShared.changelog.sharedVersionKey,
+                AviatorShared.changelog.sharedVersion
+            );
+        },
+
+        showToolPopup: function () {
+            const box = AviatorShared.html.createModalBox({
+                className: 'qasePopup',
+                id: 'qasiator-tools-changelog',
+                maxWidth: '700px',
+                customStyles: {
+                    width: 'auto',
+                    justifyContent: 'center',
+                    alignItems: 'center'
+                }
+            });
+
+            box.innerHTML = `
+                <h2 class="qase-mt-0">Qasiator Tools Changelog</h2>
+                <div class="changelog-entry"><span class="changelog-tool-tag is-aviator">aviator</span><span class="changelog-tool-tag is-traciator">traciator</span><span class="changelog-tool-tag is-epiciator">epiciator</span><span class="changelog-tool-tag is-boardiator">boardiator</span></div>
+                <div class="changelog-container">
+                    ${AviatorShared.changelog.getSharedEntryHtml()}
+                    ${AviatorShared.changelog.getCombinedEntriesHtml()}
+                </div>
+                <div class="changelog-footer">
+                    <button id="qasiator-tools-feature-ok" class="btn primary">Got it</button>
+                </div>
+            `;
+
+            AviatorShared.html.openModal({
+                overlayId: 'qasiatorToolsFeatureOverlay',
+                zIndex: '999999',
+                mountHost: 'body',
+                closeOnOverlayClick: false,
+                closeOnEscape: false,
+                closeSelectors: ['#qasiator-tools-feature-ok'],
+                container: box,
+                useSections: false
+            });
+        }
+    },
     shadowStyles: `
     @keyframes qase-spin {
         0% { transform: rotate(0deg); }
@@ -119,6 +203,10 @@ const AviatorShared = {
         display: inline;
     }
 
+    .teamcity-parameters {
+        padding-bottom: 0px;
+    }
+
     .teamcity-param-row {
         margin-top: 8px;
     }
@@ -135,6 +223,8 @@ const AviatorShared = {
         width: 100%;
         max-width: 100%;
         min-width: 0;
+        margin-bottom: 0;
+        flex: 1 1 auto;
         padding: 4px 8px;
         border: 1px solid var(--border);
         border-radius: 4px;
@@ -954,10 +1044,24 @@ const AviatorShared = {
     }
 
     .qasePopup .changelog-container {
+        flex: 1 1 auto;
         max-height: 400px;
         overflow-y: auto;
         padding-right: 10px;
         background: var(--changelog-bg-primary);
+    }
+
+    .qasePopup .changelog-footer {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex: 0 0 auto;
+        padding-top: 12px;
+    }
+
+    .qasePopup .changelog-footer .btn {
+        margin: 0;
+        min-width: 120px;
     }
 
     .qasePopup .changelog-entry {
@@ -994,6 +1098,44 @@ const AviatorShared = {
         margin: 0;
         padding-left: 20px;
         color: var(--changelog-text-secondary);
+    }
+
+    .qasePopup .changelog-tool-tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 72px;
+        padding: 2px 10px;
+        margin-right: 8px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1.4;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        vertical-align: baseline;
+        color: #fff;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    }
+
+    .qasePopup .changelog-tool-tag.is-global {
+        background: linear-gradient(135deg, #4b5563, #1f2937);
+    }
+
+    .qasePopup .changelog-tool-tag.is-aviator {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    }
+
+    .qasePopup .changelog-tool-tag.is-traciator {
+        background: linear-gradient(135deg, #0f766e, #115e59);
+    }
+
+    .qasePopup .changelog-tool-tag.is-epiciator {
+        background: linear-gradient(135deg, #b45309, #92400e);
+    }
+
+    .qasePopup .changelog-tool-tag.is-boardiator {
+        background: linear-gradient(135deg, #7c3aed, #5b21b6);
     }
 
     .qasePopup .changelog-feature-list li {
@@ -2486,6 +2628,92 @@ const AviatorShared = {
             return String(data ?? '').trim();
         },
 
+        getAcceptedParameterTypes: function () {
+            return ['env', 'configuration'];
+        },
+
+        resolveParameterType: function (type) {
+            if (type === null || type === undefined) {
+                return { isValid: true, type: 'env' };
+            }
+
+            if (typeof type !== 'string') {
+                return {
+                    isValid: false,
+                    type: null,
+                    invalidType: type,
+                    message: `Invalid TeamCity parameter type "${type}". Accepted values: env, configuration.`
+                };
+            }
+
+            const normalizedType = type.trim().toLowerCase();
+
+            if (!normalizedType) {
+                return { isValid: true, type: 'env' };
+            }
+
+            if (AviatorShared.teamcity.getAcceptedParameterTypes().includes(normalizedType)) {
+                return { isValid: true, type: normalizedType };
+            }
+
+            return {
+                isValid: false,
+                type: null,
+                invalidType: type,
+                message: `Invalid TeamCity parameter type "${type}". Accepted values: env, configuration.`
+            };
+        },
+
+        normalizeParameterType: function (type) {
+            return AviatorShared.teamcity.resolveParameterType(type).type;
+        },
+
+        formatParameterName: function (name, type) {
+            const resolved = AviatorShared.teamcity.resolveParameterType(type);
+            if (!resolved.isValid) {
+                throw new Error(resolved.message);
+            }
+
+            return resolved.type === 'configuration' ? name : `env.${name}`;
+        },
+
+        validateConfiguredParameters: function () {
+            const params = Array.isArray(window.aviator?.teamcity?.parameters)
+                ? window.aviator.teamcity.parameters
+                : [];
+
+            const invalidParam = params.find((param) => !AviatorShared.teamcity.resolveParameterType(param?.type).isValid);
+            if (!invalidParam) return null;
+
+            const resolved = AviatorShared.teamcity.resolveParameterType(invalidParam?.type);
+            return {
+                title: 'Invalid TeamCity Parameter Configuration',
+                message: resolved.message,
+                detail: `Parameter: ${invalidParam?.name || 'Unknown'}`
+            };
+        },
+
+        showParameterConfigurationError: function (error) {
+            if (!error) return;
+
+            const message = [error.title, error.message, error.detail].filter(Boolean).join('\n');
+
+            AviatorShared.html.showStatusModal([], {
+                notification: {
+                    title: error.title,
+                    message: error.message,
+                    detail: error.detail,
+                    type: 'error'
+                }
+            });
+
+            alert(message);
+        },
+
+        shouldShowBranchSelector: function () {
+            return window.aviator?.teamcity?.options?.selectBranch === true;
+        },
+
         /** trigger selected teamcity builds */
         triggerTeamCityBuilds: async function (runId, caseIds, options = {}) {
 
@@ -2501,13 +2729,24 @@ const AviatorShared = {
                         if (input) {
                             parameters.push({
                                 name: param.name,
-                                value: input.value
+                                value: input.value,
+                                type: AviatorShared.teamcity.normalizeParameterType(param.type)
                             });
                         }
                     });
                 }
 
                 return parameters;
+            }
+
+            const getBranchNameFromModal = () => {
+                if (!AviatorShared.teamcity.shouldShowBranchSelector()) return null;
+
+                const context = AviatorShared.shadowRoot || document;
+                const input = context.querySelector('#teamcity-branch-name');
+                const branchName = String(input?.value || '').trim();
+
+                return branchName || null;
             }
 
             const updateBuildStatus = (buildId, status, message, buildUrl = null) => {
@@ -2591,18 +2830,26 @@ const AviatorShared = {
                         if (modalParameters.length > 0) {
                             // Use values from modal
                             modalParameters.forEach(param => {
-                                tc_properties.push({ name: `env.${param.name}`, value: param.value })
+                                tc_properties.push({
+                                    name: AviatorShared.teamcity.formatParameterName(param.name, param.type),
+                                    value: param.value
+                                })
                             })
                         } else {
                             // Fallback to config values
                             window.aviator.teamcity.parameters.forEach(param => {
-                                tc_properties.push({ name: `env.${param.name}`, value: param.value })
+                                tc_properties.push({
+                                    name: AviatorShared.teamcity.formatParameterName(param.name, param.type),
+                                    value: param.value
+                                })
                             })
                         }
                     }
 
                     /** optional to set parameter of qase_ids for automation to only run against those (if grep set) */
                     if (AviatorShared.shadowRoot.getElementById('teamcity-qases-only').checked) tc_properties.push({ name: "env.QASE_IDS", value: caseIds.join(',') })
+
+                    const branchName = getBranchNameFromModal();
 
                     const tryTrigger = async (opts = {}) => {
                         return await AviatorShared.api({
@@ -2617,6 +2864,7 @@ const AviatorShared = {
                             anonymous: Boolean(opts.anonymous),
                             data: {
                                 buildType: { id: buildId },
+                                ...(branchName ? { branchName } : {}),
                                 properties: {
                                     property: tc_properties
                                 }
@@ -3806,6 +4054,12 @@ const AviatorShared = {
                 throw new Error('No create-run handler provided (options.onCreateRun)');
             }
 
+            const teamCityConfigError = AviatorShared.teamcity.validateConfiguredParameters();
+            if (teamCityConfigError) {
+                AviatorShared.teamcity.showParameterConfigurationError(teamCityConfigError);
+                return;
+            }
+
             // Fetch all available test plans for the multi-select dropdown
             let availableTestPlans = [];
             try {
@@ -4010,6 +4264,12 @@ const AviatorShared = {
                 return div;
             }
 
+            const teamCityConfigError = AviatorShared.teamcity.validateConfiguredParameters();
+            if (teamCityConfigError) {
+                AviatorShared.teamcity.showParameterConfigurationError(teamCityConfigError);
+                return div;
+            }
+
             const headerRow = document.createElement('div');
             headerRow.className = 'teamcity-header-row';
 
@@ -4028,6 +4288,25 @@ const AviatorShared = {
             headerRow.appendChild(title);
             headerRow.appendChild(qasesOnlyLabel);
             div.appendChild(headerRow);
+
+            if (AviatorShared.teamcity.shouldShowBranchSelector()) {
+                const row = document.createElement('div');
+                row.className = 'teamcity-param-row qase-mb-12';
+
+                const label = document.createElement('label');
+                label.className = 'teamcity-param-label';
+                label.textContent = 'Branch';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'teamcity-param-input';
+                input.id = 'teamcity-branch-name';
+                input.placeholder = 'refs/heads/main or feature/my-branch';
+
+                label.appendChild(input);
+                row.appendChild(label);
+                div.appendChild(row);
+            }
 
             // Parameters
             if (window.aviator?.teamcity?.parameters && window.aviator.teamcity.parameters.length > 0) {
@@ -4318,134 +4597,10 @@ const AviatorShared = {
 // Aviator Workflow v1.0.0
 
 const Aviator = {
-    version: '1.6.3',
-    versionKey: 'aviatorLastFeaturePopup',
+    version: '2.0.0',
 
     showFeaturePopup: function () {
-        const box = AviatorShared.html.createModalBox({
-            id: 'aviator-changelog',
-        });
-
-        box.innerHTML = `
-            <h2 class="qase-mt-0">🚀 Aviator Changelog 🚀</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.6.3</div>
-                    <div class="changelog-description">Typeahead plan selection and cross-tool Jira/Qase workflow refinements.</div>
-                    <ul class="changelog-feature-list">
-                        <li>Test plan dropdowns now support typeahead filtering in create-run modals</li>
-                        <li>Epic detection is more resilient across Jira issue layouts and icon markup variants</li>
-                        <li>Epiciator now passes optional Jira comment notes through to created runs when that feature flag is enabled</li>
-                        <li>Traceability report runs now link directly to their Qase dashboard pages</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.6.2</div>
-                    <div class="changelog-description">Feature flags, Jira comment notes, and comment accuracy improvements.</div>
-                    <ul class="changelog-feature-list">
-                        <li>New top-level window.aviator.features flags for enabling experimental or optional features</li>
-                        <li>Optional jiraCommentNotes flag adds a notes field to Aviator and includes those notes in the Jira comment</li>
-                        <li>Jira comments now correctly count selected test cases when users choose only test plans</li>
-                        <li>New epiciator and boardiator flags control whether those buttons appear in Jira</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.6.1</div>
-                    <div class="changelog-text">UI styling tweeks for large Teamcity build tree.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.6.0</div>
-                    <div class="changelog-description">UI/UX improvements:</div>
-                    <ul class="changelog-feature-list">
-                        <li>Consolidate status message popup presentation.</li>
-                        <li>Selected Teamcity builds provide status information feedback.</li>
-                        <li>Robust Teamcity api error messaging.</li>
-                        <li>Unified Run Title validation experience.</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.5.0</div>
-                    <div class="changelog-description">Major UI/UX improvements:</div>
-                    <ul class="changelog-feature-list">
-                        <li>Optional Teamcity builds configuration to set a high level project to get a list of all subprojects/builds.
-                        <code class="changelog-inline-code">window.aviator.teamcity.projects = ['projectId']</code></li>
-                        <li>Dynamic Layout moves TeamCity Builds Section to a dedicated column for better usability when 4+ builds.</li>
-                        <li>Test Plan Dropdown presents all test plans for the Qase project. No longer have to link test plans in jira tickets.</li>
-                        <li>Build Parameters section to edit/clear any <code class="changelog-inline-code">window.aviator.teamcity.parameter</code>.</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4.4</div>
-                    <div class="changelog-text">Introducing Traciator v1.0.0! New traceability reporting tool with independent versioning.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4.3</div>
-                    <div class="changelog-text">Add Jira comment for every test run created.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4.2</div>
-                    <div class="changelog-text">Gracefully handle TeamCity build fetch errors. Display to user in modal.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4.1</div>
-                    <div class="changelog-text">Fixed issue with Jira sidebars not displaying Aviator button.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.4</div>
-                    <div class="changelog-text">Consolidated error messaging. Handle incorrect configuration more gracefully.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.3</div>
-                    <div class="changelog-text">New <code class="changelog-inline-code">keep open</code> checkbox added to keep modal open for multiple test run creations.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.2</div>
-                    <div class="changelog-description">Configure custom parameters to send with TeamCity builds.</div>
-                    <div class="changelog-note">
-                        See <a href="https://github.com/jrockefeller/utility-qase-jira-tampermonkey/blob/main/README.md" target="_blank" class="changelog-link">README.md</a> for details.
-                    </div>
-                    <pre class="changelog-code-block">teamcity: {
-    parameters: [
-        { name: 'custom_param', value: '123' }
-    ]
-}</pre>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.1</div>
-                    <div class="changelog-text">Checkbox to send only selected QaseIds in TeamCity build parameter <code class="changelog-inline-code">env.QASE_IDS</code>.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.0</div>
-                    <div class="changelog-text">Aviator runs in <code class="changelog-inline-code">shadowRoot</code>! Isolates from Jira hot keys.</div>
-                </div>
-            </div>
-                            <button id="feature-ok" class="btn primary qase-mt-10">Got it</button>
-            `;
-
-        AviatorShared.html.openModal({
-            overlayId: 'qaseAviatorFeatureOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            closeSelectors: ['#feature-ok'],
-            container: box,
-            useSections: false
-        });
+        AviatorShared.changelog.showToolPopup('aviator');
     },
 
     getFormRunData: function () {
@@ -4792,7 +4947,7 @@ const Aviator = {
         });
 
         // then run feature popup once per version
-        if (AviatorShared.configuration.shouldShowFeaturePopup(Aviator.versionKey, Aviator.version)) {
+        if (AviatorShared.changelog.shouldShowToolPopup()) {
             Aviator.showFeaturePopup(AviatorShared.shadowRoot);
         }
     }
@@ -4806,94 +4961,10 @@ const Aviator = {
 // Traciator Workflow v1.0.0
 
 const Traciator = {
-    version: '1.1.2',
-    versionKey: 'traciatorLastFeaturePopup',
+    version: '2.0.0',
 
     showTraciatorFeaturePopup: function () {
-        const box = AviatorShared.html.createModalBox({
-            className: 'qasePopup',
-            id: 'qaseTraciatorChangelog',
-            maxWidth: '600px',
-            customStyles: {
-                width: 'auto',
-                justifyContent: 'center',
-                alignItems: 'center'
-            }
-        });
-
-        box.innerHTML = `
-            <h2 class="qase-mt-0">🔍 Traciator Changelog 🔍</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.1.2</div>
-                    <ul class="changelog-feature-list">
-                        <li>Traceability report run titles now link directly to the corresponding Qase run</li>
-                        <li>Shared test plan dropdowns in run creation now support typeahead filtering</li>
-                        <li>Matching Jira selections can carry optional Jira comment notes into the created run workflow</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.1.1</div>
-                    <ul class="changelog-feature-list">
-                        <li>UI styling tweeks for large Teamcity build tree.</li>
-                        <li>Bugfix: Tracibility List handle jira key longer than 3 characters.</li>
-                    </ul>                   
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.1.0</div>
-                    <div class="changelog-description">Performance and Feedback:</div>
-                    <ul class="changelog-feature-list">
-                        <li>Consolidate status message popup presentation.</li>
-                        <li>Selected Teamcity builds provide status information feedback.</li>
-                        <li>Robust Teamcity api error messaging.</li>
-                        <li>Unified Run Title validation experience.</li>
-                        <li>Performant GET qase/runs by 40%</li>
-                    </ul>  
-                     <div class="changelog-description">Bugs:</div>
-                    <ul class="changelog-feature-list">
-                        <li>Test run modal shows total cases from all sources.</li>
-                        <li>Selected test plans included in created test run.</li>
-                    </ul>                   
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.0.0</div>
-                    <div class="changelog-description">Initial Traciator release! Generate comprehensive traceability reports from release pages.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">Core Features</div>
-                    <ul class="changelog-feature-list">
-                        <li>Visual test coverage mapping between Jira issues, test cases, and test runs</li>
-                        <li>Export detailed CSV reports for stakeholder analysis</li>
-                        <li>Create test runs directly from traceability data</li>
-                        <li>Real-time test run statistics and coverage indicators</li>
-                        <li>Smart filtering by specific Jira keys from release pages</li>
-                        <li>Distinct test case counting across multiple data sources</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">How to use</div>
-                    <div class="changelog-text">Navigate to any Jira release page and click the 🔍 Traciator button to generate your traceability report!</div>
-                </div>
-                        </div>
-                            <button id="traciator-feature-ok" class="btn primary qase-mt-10">Got it</button>
-            `;
-
-        AviatorShared.html.openModal({
-            overlayId: 'qaseTraciatorFeatureOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            closeSelectors: ['#traciator-feature-ok'],
-            container: box,
-            useSections: false
-        });
+        AviatorShared.changelog.showToolPopup('traciator');
     },
 
     initTraciator: async function () {
@@ -5197,7 +5268,7 @@ const Traciator = {
         });
 
         // Show Traciator changelog once per version
-        if (showFeaturePopup && AviatorShared.configuration.shouldShowFeaturePopup(Traciator.versionKey, Traciator.version)) {
+        if (showFeaturePopup && AviatorShared.changelog.shouldShowToolPopup()) {
             // Delay slightly to ensure modal is fully rendered
             setTimeout(() => {
                 Traciator.showTraciatorFeaturePopup();
@@ -5625,8 +5696,7 @@ const Traciator = {
 // === src\epiciator.js ===
 
 const Epiciator = {
-    version: '1.0.1',
-    versionKey: 'epiciatorLastFeaturePopup',
+    version: '2.0.0',
 
     isEpicIssueContext: function () {
         return AviatorShared.configuration.isEpicIssueContext();
@@ -5640,7 +5710,7 @@ const Epiciator = {
         let lastSize = 0;
 
         const collect = () => {
-            const table = document.querySelector('table[aria-label="Work"][data-vc="issue-table"], table[aria-label="Work"]');
+            const table = document.querySelector('table[aria-label*="Work"][data-vc="issue-table"], table[aria-label*="Work"]');
             if (!table) return;
 
             const anchors = table.querySelectorAll(
@@ -5748,7 +5818,7 @@ const Epiciator = {
                 }
             );
 
-            if (AviatorShared.configuration.shouldShowFeaturePopup(Epiciator.versionKey, Epiciator.version)) {
+            if (AviatorShared.changelog.shouldShowToolPopup()) {
                 setTimeout(() => {
                     Epiciator.showEpiciatorFeaturePopup();
                 }, 50);
@@ -5757,64 +5827,7 @@ const Epiciator = {
     },
 
     showEpiciatorFeaturePopup: function () {
-        const box = AviatorShared.html.createModalBox({
-            className: 'qasePopup',
-            id: 'qaseEpiciatorChangelog',
-            maxWidth: '600px',
-            customStyles: {
-                width: 'auto',
-                justifyContent: 'center',
-                alignItems: 'center'
-            }
-        });
-
-        box.innerHTML = `
-            <h2 class="qase-mt-0">🧩 Epiciator Changelog 🧩</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.0.1</div>
-                    <ul class="changelog-feature-list">
-                        <li>Epic detection is more robust across Jira page variants</li>
-                        <li>Optional Jira comment notes now flow into Epic-created test runs when enabled</li>
-                        <li>Shared test plan dropdowns now support typeahead filtering</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">v1.0.0</div>
-                    <div class="changelog-description">Initial Epiciator release for Jira Epic pages.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">Core Features</div>
-                    <ul class="changelog-feature-list">
-                        <li>Scrape child work items directly from the Epic Work table</li>
-                        <li>Collect linked Qase test cases across all Epic children</li>
-                        <li>Create a consolidated Qase test run for the Epic</li>
-                        <li>Prefill the run title using the current Epic key</li>
-                        <li>Reuse the shared test run configuration and TeamCity options</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">How to use</div>
-                    <div class="changelog-text">Open a Jira Epic and click the 🧩 Epiciator button to build a test run from its child work items.</div>
-                </div>
-                        </div>
-                            <button id="epiciator-feature-ok" class="btn primary qase-mt-10">Got it</button>
-            `;
-
-        AviatorShared.html.openModal({
-            overlayId: 'qaseEpiciatorFeatureOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            closeSelectors: ['#epiciator-feature-ok'],
-            container: box,
-            useSections: false
-        });
+        AviatorShared.changelog.showToolPopup('epiciator');
     },
 
 }
@@ -5823,58 +5836,10 @@ const Epiciator = {
 // === src\boardiator.js ===
 
 const Boardiator = {
-    version: '1.0.0',
-    versionKey: 'boardiatorLastFeaturePopup',
+    version: '2.0.0',
 
     showBoardiatorFeaturePopup: function () {
-        const box = AviatorShared.html.createModalBox({
-            className: 'qasePopup',
-            id: 'qaseBoardiatorChangelog',
-            maxWidth: '600px',
-            customStyles: {
-                width: 'auto',
-                justifyContent: 'center',
-                alignItems: 'center'
-            }
-        });
-
-        box.innerHTML = `
-            <h2 class="qase-mt-0">📋 Boardiator Changelog 📋</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.0.0</div>
-                    <div class="changelog-description">Initial Boardiator release for Jira board traceability reporting.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">Core Features</div>
-                    <ul class="changelog-feature-list">
-                        <li>Scrape Jira work items directly from the active board.</li>
-                        <li>Build traceability coverage using linked Qase test cases and recent test runs.</li>
-                        <li>Open the full report in the existing Traciator coverage view.</li>
-                        <li>Create follow-up test runs from the generated board coverage data.</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">How to use</div>
-                    <div class="changelog-text">Open a Jira board and click the 📋 Boardiator button to generate a verification report for the work currently visible on the board.</div>
-                </div>
-            </div>
-            <button id="boardiator-feature-ok" class="btn primary qase-mt-10">Got it</button>
-        `;
-
-        AviatorShared.html.openModal({
-            overlayId: 'qaseBoardiatorFeatureOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            closeSelectors: ['#boardiator-feature-ok'],
-            container: box,
-            useSections: false
-        });
+        AviatorShared.changelog.showToolPopup('boardiator');
     },
 
     isBoardContext: function () {
@@ -6112,7 +6077,7 @@ const Boardiator = {
                     }
                 );
 
-                if (AviatorShared.configuration.shouldShowFeaturePopup(Boardiator.versionKey, Boardiator.version)) {
+                if (AviatorShared.changelog.shouldShowToolPopup()) {
                     setTimeout(() => {
                         Boardiator.showBoardiatorFeaturePopup();
                     }, 50);

@@ -6,6 +6,90 @@ const AviatorShared = {
     shadowRoot: null,
     createdRun: false,
     _inFlight: {},
+    changelog: {
+        sharedVersion: '2.0.0',
+        sharedVersionKey: 'qasiatorToolsLastFeaturePopup',
+        combinedEntriesHtml: `
+                <div class="changelog-entry">
+                    <div class="changelog-version">Qasiator Tools v1.0.0</div>
+                    <div class="changelog-description">Consolidated historical release notes across all tools.</div>
+                    <ul class="changelog-feature-list">
+                        <li><span class="changelog-tool-tag is-global">global</span> ShadowRoot-based modals, consolidated status messaging, and broader Jira compatibility improvements landed across the toolset.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> Core test run creation gained keep-open support, TeamCity build triggering, selected Qase ID forwarding, and Jira association feedback.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> TeamCity integration expanded with project-level build discovery, editable build parameters, stronger error handling, improved large-tree UI, and split-column modal layouts.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> Qase run setup added project-wide test plan selection, feature flags, optional Jira comment notes, and typeahead plan filtering.</li>
+                        <li><span class="changelog-tool-tag is-traciator">traciator</span> Release-page traceability reporting added CSV export, distinct case counting, run creation from traceability data, and faster run retrieval.</li>
+                        <li><span class="changelog-tool-tag is-traciator">traciator</span> Traceability workflows improved with better TeamCity feedback, long Jira key handling, linked Qase run titles, optional Jira comment notes, and typeahead plan filtering.</li>
+                        <li><span class="changelog-tool-tag is-epiciator">epiciator</span> Epic workflows added child issue scraping, Qase case aggregation, shared run creation, stronger Epic detection, optional Jira comment notes, and typeahead plan filtering.</li>
+                        <li><span class="changelog-tool-tag is-boardiator">boardiator</span> Board workflows added board issue scraping, traceability reporting from board contents, and follow-up test run creation from board results.</li>
+                    </ul>
+                </div>
+        `,
+
+        getSharedEntryHtml: function () {
+            return `
+                <div class="changelog-entry featured">
+                    <div class="changelog-version">Qasiator Tools Changelog v${AviatorShared.changelog.sharedVersion}</div>
+                    <div class="changelog-description">Unified versioning and a single combined changelog for the full toolset.</div>
+                    <ul class="changelog-feature-list">
+                        <li><span class="changelog-tool-tag is-global">global</span> Qasiator Tools now uses one shared changelog modal and one shared release version across Aviator, Traciator, Epiciator, and Boardiator.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> TeamCity parameter configuration now supports <code class="changelog-inline-code">window.aviator.teamcity.parameters[].type</code> with <code class="changelog-inline-code">env</code> and <code class="changelog-inline-code">configuration</code>.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> Empty TeamCity parameter types still default to <code class="changelog-inline-code">env</code>, and invalid values now block the modal with an error.</li>
+                        <li><span class="changelog-tool-tag is-traciator">traciator</span> Traciator now participates in the shared 2.0.0 release and surfaces its history through the unified changelog modal.</li>
+                        <li><span class="changelog-tool-tag is-epiciator">epiciator</span> Epiciator now participates in the shared 2.0.0 release and surfaces its history through the unified changelog modal.</li>
+                        <li><span class="changelog-tool-tag is-boardiator">boardiator</span> Boardiator now participates in the shared 2.0.0 release and surfaces its history through the unified changelog modal.</li>
+                    </ul>
+                </div>
+            `;
+        },
+
+        getCombinedEntriesHtml: function () {
+            return AviatorShared.changelog.combinedEntriesHtml;
+        },
+
+        shouldShowToolPopup: function () {
+            return AviatorShared.configuration.shouldShowFeaturePopup(
+                AviatorShared.changelog.sharedVersionKey,
+                AviatorShared.changelog.sharedVersion
+            );
+        },
+
+        showToolPopup: function () {
+            const box = AviatorShared.html.createModalBox({
+                className: 'qasePopup',
+                id: 'qasiator-tools-changelog',
+                maxWidth: '700px',
+                customStyles: {
+                    width: 'auto',
+                    justifyContent: 'center',
+                    alignItems: 'center'
+                }
+            });
+
+            box.innerHTML = `
+                <h2 class="qase-mt-0">Qasiator Tools Changelog</h2>
+                <div class="changelog-entry"><span class="changelog-tool-tag is-aviator">aviator</span><span class="changelog-tool-tag is-traciator">traciator</span><span class="changelog-tool-tag is-epiciator">epiciator</span><span class="changelog-tool-tag is-boardiator">boardiator</span></div>
+                <div class="changelog-container">
+                    ${AviatorShared.changelog.getSharedEntryHtml()}
+                    ${AviatorShared.changelog.getCombinedEntriesHtml()}
+                </div>
+                <div class="changelog-footer">
+                    <button id="qasiator-tools-feature-ok" class="btn primary">Got it</button>
+                </div>
+            `;
+
+            AviatorShared.html.openModal({
+                overlayId: 'qasiatorToolsFeatureOverlay',
+                zIndex: '999999',
+                mountHost: 'body',
+                closeOnOverlayClick: false,
+                closeOnEscape: false,
+                closeSelectors: ['#qasiator-tools-feature-ok'],
+                container: box,
+                useSections: false
+            });
+        }
+    },
     shadowStyles: `
     @keyframes qase-spin {
         0% { transform: rotate(0deg); }
@@ -107,6 +191,10 @@ const AviatorShared = {
         display: inline;
     }
 
+    .teamcity-parameters {
+        padding-bottom: 0px;
+    }
+
     .teamcity-param-row {
         margin-top: 8px;
     }
@@ -123,6 +211,8 @@ const AviatorShared = {
         width: 100%;
         max-width: 100%;
         min-width: 0;
+        margin-bottom: 0;
+        flex: 1 1 auto;
         padding: 4px 8px;
         border: 1px solid var(--border);
         border-radius: 4px;
@@ -942,10 +1032,24 @@ const AviatorShared = {
     }
 
     .qasePopup .changelog-container {
+        flex: 1 1 auto;
         max-height: 400px;
         overflow-y: auto;
         padding-right: 10px;
         background: var(--changelog-bg-primary);
+    }
+
+    .qasePopup .changelog-footer {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex: 0 0 auto;
+        padding-top: 12px;
+    }
+
+    .qasePopup .changelog-footer .btn {
+        margin: 0;
+        min-width: 120px;
     }
 
     .qasePopup .changelog-entry {
@@ -982,6 +1086,44 @@ const AviatorShared = {
         margin: 0;
         padding-left: 20px;
         color: var(--changelog-text-secondary);
+    }
+
+    .qasePopup .changelog-tool-tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 72px;
+        padding: 2px 10px;
+        margin-right: 8px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1.4;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        vertical-align: baseline;
+        color: #fff;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    }
+
+    .qasePopup .changelog-tool-tag.is-global {
+        background: linear-gradient(135deg, #4b5563, #1f2937);
+    }
+
+    .qasePopup .changelog-tool-tag.is-aviator {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    }
+
+    .qasePopup .changelog-tool-tag.is-traciator {
+        background: linear-gradient(135deg, #0f766e, #115e59);
+    }
+
+    .qasePopup .changelog-tool-tag.is-epiciator {
+        background: linear-gradient(135deg, #b45309, #92400e);
+    }
+
+    .qasePopup .changelog-tool-tag.is-boardiator {
+        background: linear-gradient(135deg, #7c3aed, #5b21b6);
     }
 
     .qasePopup .changelog-feature-list li {
@@ -2474,6 +2616,92 @@ const AviatorShared = {
             return String(data ?? '').trim();
         },
 
+        getAcceptedParameterTypes: function () {
+            return ['env', 'configuration'];
+        },
+
+        resolveParameterType: function (type) {
+            if (type === null || type === undefined) {
+                return { isValid: true, type: 'env' };
+            }
+
+            if (typeof type !== 'string') {
+                return {
+                    isValid: false,
+                    type: null,
+                    invalidType: type,
+                    message: `Invalid TeamCity parameter type "${type}". Accepted values: env, configuration.`
+                };
+            }
+
+            const normalizedType = type.trim().toLowerCase();
+
+            if (!normalizedType) {
+                return { isValid: true, type: 'env' };
+            }
+
+            if (AviatorShared.teamcity.getAcceptedParameterTypes().includes(normalizedType)) {
+                return { isValid: true, type: normalizedType };
+            }
+
+            return {
+                isValid: false,
+                type: null,
+                invalidType: type,
+                message: `Invalid TeamCity parameter type "${type}". Accepted values: env, configuration.`
+            };
+        },
+
+        normalizeParameterType: function (type) {
+            return AviatorShared.teamcity.resolveParameterType(type).type;
+        },
+
+        formatParameterName: function (name, type) {
+            const resolved = AviatorShared.teamcity.resolveParameterType(type);
+            if (!resolved.isValid) {
+                throw new Error(resolved.message);
+            }
+
+            return resolved.type === 'configuration' ? name : `env.${name}`;
+        },
+
+        validateConfiguredParameters: function () {
+            const params = Array.isArray(window.aviator?.teamcity?.parameters)
+                ? window.aviator.teamcity.parameters
+                : [];
+
+            const invalidParam = params.find((param) => !AviatorShared.teamcity.resolveParameterType(param?.type).isValid);
+            if (!invalidParam) return null;
+
+            const resolved = AviatorShared.teamcity.resolveParameterType(invalidParam?.type);
+            return {
+                title: 'Invalid TeamCity Parameter Configuration',
+                message: resolved.message,
+                detail: `Parameter: ${invalidParam?.name || 'Unknown'}`
+            };
+        },
+
+        showParameterConfigurationError: function (error) {
+            if (!error) return;
+
+            const message = [error.title, error.message, error.detail].filter(Boolean).join('\n');
+
+            AviatorShared.html.showStatusModal([], {
+                notification: {
+                    title: error.title,
+                    message: error.message,
+                    detail: error.detail,
+                    type: 'error'
+                }
+            });
+
+            alert(message);
+        },
+
+        shouldShowBranchSelector: function () {
+            return window.aviator?.teamcity?.options?.selectBranch === true;
+        },
+
         /** trigger selected teamcity builds */
         triggerTeamCityBuilds: async function (runId, caseIds, options = {}) {
 
@@ -2489,13 +2717,24 @@ const AviatorShared = {
                         if (input) {
                             parameters.push({
                                 name: param.name,
-                                value: input.value
+                                value: input.value,
+                                type: AviatorShared.teamcity.normalizeParameterType(param.type)
                             });
                         }
                     });
                 }
 
                 return parameters;
+            }
+
+            const getBranchNameFromModal = () => {
+                if (!AviatorShared.teamcity.shouldShowBranchSelector()) return null;
+
+                const context = AviatorShared.shadowRoot || document;
+                const input = context.querySelector('#teamcity-branch-name');
+                const branchName = String(input?.value || '').trim();
+
+                return branchName || null;
             }
 
             const updateBuildStatus = (buildId, status, message, buildUrl = null) => {
@@ -2579,18 +2818,26 @@ const AviatorShared = {
                         if (modalParameters.length > 0) {
                             // Use values from modal
                             modalParameters.forEach(param => {
-                                tc_properties.push({ name: `env.${param.name}`, value: param.value })
+                                tc_properties.push({
+                                    name: AviatorShared.teamcity.formatParameterName(param.name, param.type),
+                                    value: param.value
+                                })
                             })
                         } else {
                             // Fallback to config values
                             window.aviator.teamcity.parameters.forEach(param => {
-                                tc_properties.push({ name: `env.${param.name}`, value: param.value })
+                                tc_properties.push({
+                                    name: AviatorShared.teamcity.formatParameterName(param.name, param.type),
+                                    value: param.value
+                                })
                             })
                         }
                     }
 
                     /** optional to set parameter of qase_ids for automation to only run against those (if grep set) */
                     if (AviatorShared.shadowRoot.getElementById('teamcity-qases-only').checked) tc_properties.push({ name: "env.QASE_IDS", value: caseIds.join(',') })
+
+                    const branchName = getBranchNameFromModal();
 
                     const tryTrigger = async (opts = {}) => {
                         return await AviatorShared.api({
@@ -2605,6 +2852,7 @@ const AviatorShared = {
                             anonymous: Boolean(opts.anonymous),
                             data: {
                                 buildType: { id: buildId },
+                                ...(branchName ? { branchName } : {}),
                                 properties: {
                                     property: tc_properties
                                 }
@@ -3794,6 +4042,12 @@ const AviatorShared = {
                 throw new Error('No create-run handler provided (options.onCreateRun)');
             }
 
+            const teamCityConfigError = AviatorShared.teamcity.validateConfiguredParameters();
+            if (teamCityConfigError) {
+                AviatorShared.teamcity.showParameterConfigurationError(teamCityConfigError);
+                return;
+            }
+
             // Fetch all available test plans for the multi-select dropdown
             let availableTestPlans = [];
             try {
@@ -3998,6 +4252,12 @@ const AviatorShared = {
                 return div;
             }
 
+            const teamCityConfigError = AviatorShared.teamcity.validateConfiguredParameters();
+            if (teamCityConfigError) {
+                AviatorShared.teamcity.showParameterConfigurationError(teamCityConfigError);
+                return div;
+            }
+
             const headerRow = document.createElement('div');
             headerRow.className = 'teamcity-header-row';
 
@@ -4016,6 +4276,25 @@ const AviatorShared = {
             headerRow.appendChild(title);
             headerRow.appendChild(qasesOnlyLabel);
             div.appendChild(headerRow);
+
+            if (AviatorShared.teamcity.shouldShowBranchSelector()) {
+                const row = document.createElement('div');
+                row.className = 'teamcity-param-row qase-mb-12';
+
+                const label = document.createElement('label');
+                label.className = 'teamcity-param-label';
+                label.textContent = 'Branch';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'teamcity-param-input';
+                input.id = 'teamcity-branch-name';
+                input.placeholder = 'refs/heads/main or feature/my-branch';
+
+                label.appendChild(input);
+                row.appendChild(label);
+                div.appendChild(row);
+            }
 
             // Parameters
             if (window.aviator?.teamcity?.parameters && window.aviator.teamcity.parameters.length > 0) {

@@ -1,56 +1,8 @@
 const Boardiator = {
-    version: '1.0.0',
-    versionKey: 'boardiatorLastFeaturePopup',
+    version: '2.0.0',
 
     showBoardiatorFeaturePopup: function () {
-        const box = AviatorShared.html.createModalBox({
-            className: 'qasePopup',
-            id: 'qaseBoardiatorChangelog',
-            maxWidth: '600px',
-            customStyles: {
-                width: 'auto',
-                justifyContent: 'center',
-                alignItems: 'center'
-            }
-        });
-
-        box.innerHTML = `
-            <h2 class="qase-mt-0">📋 Boardiator Changelog 📋</h2>
-            <div class="changelog-container">
-
-                <div class="changelog-entry featured">
-                    <div class="changelog-version">v1.0.0</div>
-                    <div class="changelog-description">Initial Boardiator release for Jira board traceability reporting.</div>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">Core Features</div>
-                    <ul class="changelog-feature-list">
-                        <li>Scrape Jira work items directly from the active board.</li>
-                        <li>Build traceability coverage using linked Qase test cases and recent test runs.</li>
-                        <li>Open the full report in the existing Traciator coverage view.</li>
-                        <li>Create follow-up test runs from the generated board coverage data.</li>
-                    </ul>
-                </div>
-
-                <div class="changelog-entry">
-                    <div class="changelog-version">How to use</div>
-                    <div class="changelog-text">Open a Jira board and click the 📋 Boardiator button to generate a verification report for the work currently visible on the board.</div>
-                </div>
-            </div>
-            <button id="boardiator-feature-ok" class="btn primary qase-mt-10">Got it</button>
-        `;
-
-        AviatorShared.html.openModal({
-            overlayId: 'qaseBoardiatorFeatureOverlay',
-            zIndex: '999999',
-            mountHost: 'body',
-            closeOnOverlayClick: false,
-            closeOnEscape: false,
-            closeSelectors: ['#boardiator-feature-ok'],
-            container: box,
-            useSections: false
-        });
+        AviatorShared.changelog.showToolPopup('boardiator');
     },
 
     isBoardContext: function () {
@@ -288,7 +240,7 @@ const Boardiator = {
                     }
                 );
 
-                if (AviatorShared.configuration.shouldShowFeaturePopup(Boardiator.versionKey, Boardiator.version)) {
+                if (AviatorShared.changelog.shouldShowToolPopup()) {
                     setTimeout(() => {
                         Boardiator.showBoardiatorFeaturePopup();
                     }, 50);
