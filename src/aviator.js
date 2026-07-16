@@ -2,8 +2,6 @@
 // Aviator Workflow v1.0.0
 
 const Aviator = {
-    version: '2.0.0',
-
     showFeaturePopup: function () {
         AviatorShared.changelog.showToolPopup('aviator');
     },
@@ -222,7 +220,7 @@ const Aviator = {
                 headerHtml: `
                     <div class="popup-title">
                         <h2>Aviator</h2>
-                        <small>v${Aviator.version}</small>
+                        <small class="qase-version-link">v${AviatorShared.changelog.sharedVersion}</small>
                         <label class="qase-ml-auto"><input type="checkbox" id="keep-open" />keep open</label>
                     </div>
                     <p>Create a Test Run in Qase by selecting a combination of test plans and cases.</p>`,

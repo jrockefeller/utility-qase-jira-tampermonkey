@@ -1,6 +1,4 @@
 const Epiciator = {
-    version: '2.0.0',
-
     isEpicIssueContext: function () {
         return AviatorShared.configuration.isEpicIssueContext();
     },

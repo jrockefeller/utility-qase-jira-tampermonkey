@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Aviator
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Scrape Qase plans + cases from Jira page and build test runs
 // @match        https://paylocity.atlassian.net/*
 // @grant        GM_xmlhttpRequest
@@ -62,10 +62,33 @@
     // --- STEP 2: Try to fetch latest core from GitHub ---
     const STORAGE_KEY = "aviator.cachedCode";
     const STORAGE_TIME_KEY = "aviator.cachedTime";
-    const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
     const url = "https://raw.githubusercontent.com/jrockefeller/utility-qase-jira-tampermonkey/main/aviator.js";
+
+    // Optional integrity pin. Set window.aviator.coreIntegrity to the expected
+    // SHA-256 (hex) of aviator.js to refuse running anything that doesn't match.
+    // Leave unset to always run the latest published core.
+    const expectedSha256 = (window.aviator && window.aviator.coreIntegrity)
+        ? String(window.aviator.coreIntegrity).trim().toLowerCase()
+        : null;
+
+    // Sanity check: the fetched body must look like the Aviator core, not a
+    // GitHub error/HTML page or a truncated response. Prevents caching/executing
+    // garbage that would otherwise poison the cache for 24h.
+    const looksLikeAviatorCore = (code) =>
+        typeof code === "string"
+        && code.length > 1000
+        && code.includes("AviatorShared")
+        && code.includes("addAviatorTools");
+
+    const sha256Hex = async (text) => {
+        const bytes = new TextEncoder().encode(text);
+        const digest = await crypto.subtle.digest("SHA-256", bytes);
+        return Array.from(new Uint8Array(digest))
+            .map(b => b.toString(16).padStart(2, "0"))
+            .join("");
+    };
+
     let latestCode = null;
-    let useCache = false;
     try {
         const res = await new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
@@ -76,37 +99,57 @@
                 onerror: err => reject(err)
             });
         });
-        if (res.status === 200 && res.responseText) {
-            latestCode = res.responseText;
-            // Save to localStorage
-            localStorage.setItem(STORAGE_KEY, latestCode);
-            localStorage.setItem(STORAGE_TIME_KEY, Date.now().toString());
-            console.log(":white_check_mark: Aviator core updated from GitHub:", url);
-        } else {
+
+        if (res.status !== 200 || !res.responseText) {
             throw new Error("Bad status " + res.status);
         }
+
+        const fetched = res.responseText;
+
+        if (!looksLikeAviatorCore(fetched)) {
+            throw new Error("Fetched core failed structural validation");
+        }
+
+        if (expectedSha256) {
+            const actual = await sha256Hex(fetched);
+            if (actual !== expectedSha256) {
+                throw new Error("Core integrity mismatch (expected " + expectedSha256 + ", got " + actual + ")");
+            }
+        }
+
+        latestCode = fetched;
+        // Only cache content that passed validation (and the integrity pin, if set).
+        localStorage.setItem(STORAGE_KEY, latestCode);
+        localStorage.setItem(STORAGE_TIME_KEY, Date.now().toString());
+        console.log("✅ Aviator core updated from GitHub:", url);
     } catch (e) {
-        console.warn(":warning: Could not fetch Aviator core, falling back to cache:", e);
-        useCache = true;
+        console.warn("⚠️ Could not fetch/validate Aviator core, falling back to cache:", e);
     }
+
     // --- STEP 3: Fallback to cached version if needed ---
     if (!latestCode) {
         const cachedCode = localStorage.getItem(STORAGE_KEY);
         const cachedTime = localStorage.getItem(STORAGE_TIME_KEY);
-        if (cachedCode) {
+        if (cachedCode && looksLikeAviatorCore(cachedCode)) {
+            // If an integrity pin is set, the cached copy must satisfy it too.
+            if (expectedSha256 && (await sha256Hex(cachedCode)) !== expectedSha256) {
+                console.error("❌ Cached Aviator core fails the integrity pin; refusing to run.");
+                return;
+            }
             latestCode = cachedCode;
-            console.log(":package: Loaded Aviator core from cache (age: " +
+            console.log("📦 Loaded Aviator core from cache (age: " +
                 ((Date.now() - cachedTime) / 1000 / 60).toFixed(1) + " min)");
         } else {
-            console.error(":x: No Aviator core available (network + cache failed).");
+            console.error("❌ No valid Aviator core available (network + cache failed).");
             return;
         }
     }
+
     // --- STEP 4: Run Aviator core in page context ---
     try {
         eval(latestCode);
-        console.log(":white_check_mark: Aviator core executed in Tampermonkey sandbox");
+        console.log("✅ Aviator core executed in Tampermonkey sandbox");
     } catch (e) {
-        console.error(":x: Failed to execute Aviator core:", e);
+        console.error("❌ Failed to execute Aviator core:", e);
     }
 })();

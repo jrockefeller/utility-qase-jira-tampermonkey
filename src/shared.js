@@ -7,9 +7,18 @@ const AviatorShared = {
     createdRun: false,
     _inFlight: {},
     changelog: {
-        sharedVersion: '2.0.0',
+        sharedVersion: '2.0.1',
         sharedVersionKey: 'qasiatorToolsLastFeaturePopup',
         combinedEntriesHtml: `
+                <div class="changelog-entry">
+                    <div class="changelog-version">Qasiator Tools v2.0.0</div>
+                    <div class="changelog-description">Unified versioning and a single combined changelog for the full toolset.</div>
+                    <ul class="changelog-feature-list">
+                        <li><span class="changelog-tool-tag is-global">global</span> Qasiator Tools now uses one shared changelog modal and one shared release version across Aviator, Traciator, Epiciator, and Boardiator.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> TeamCity parameter configuration now supports <code class="changelog-inline-code">window.aviator.teamcity.parameters[].type</code> with <code class="changelog-inline-code">env</code> and <code class="changelog-inline-code">configuration</code>.</li>
+                        <li><span class="changelog-tool-tag is-aviator">aviator</span> Empty TeamCity parameter types still default to <code class="changelog-inline-code">env</code>, and invalid values now block the modal with an error.</li>
+                    </ul>
+                </div>
                 <div class="changelog-entry">
                     <div class="changelog-version">Qasiator Tools v1.0.0</div>
                     <div class="changelog-description">Consolidated historical release notes across all tools.</div>
@@ -30,14 +39,13 @@ const AviatorShared = {
             return `
                 <div class="changelog-entry featured">
                     <div class="changelog-version">Qasiator Tools Changelog v${AviatorShared.changelog.sharedVersion}</div>
-                    <div class="changelog-description">Unified versioning and a single combined changelog for the full toolset.</div>
+                    <div class="changelog-description">Security &amp; reliability hardening across the toolset.</div>
                     <ul class="changelog-feature-list">
-                        <li><span class="changelog-tool-tag is-global">global</span> Qasiator Tools now uses one shared changelog modal and one shared release version across Aviator, Traciator, Epiciator, and Boardiator.</li>
-                        <li><span class="changelog-tool-tag is-aviator">aviator</span> TeamCity parameter configuration now supports <code class="changelog-inline-code">window.aviator.teamcity.parameters[].type</code> with <code class="changelog-inline-code">env</code> and <code class="changelog-inline-code">configuration</code>.</li>
-                        <li><span class="changelog-tool-tag is-aviator">aviator</span> Empty TeamCity parameter types still default to <code class="changelog-inline-code">env</code>, and invalid values now block the modal with an error.</li>
-                        <li><span class="changelog-tool-tag is-traciator">traciator</span> Traciator now participates in the shared 2.0.0 release and surfaces its history through the unified changelog modal.</li>
-                        <li><span class="changelog-tool-tag is-epiciator">epiciator</span> Epiciator now participates in the shared 2.0.0 release and surfaces its history through the unified changelog modal.</li>
-                        <li><span class="changelog-tool-tag is-boardiator">boardiator</span> Boardiator now participates in the shared 2.0.0 release and surfaces its history through the unified changelog modal.</li>
+                        <li><span class="changelog-tool-tag is-global">global</span> Qase/TeamCity API failures are now detected properly, so Jira association and run-creation status reflect what actually happened instead of silently reporting success.</li>
+                        <li><span class="changelog-tool-tag is-global">global</span> Test case, plan, run, and Jira names are now escaped everywhere they render, hardening the popups against malformed or malicious titles.</li>
+                        <li><span class="changelog-tool-tag is-traciator">traciator</span> CSV export is now protected against spreadsheet formula injection.</li>
+                        <li><span class="changelog-tool-tag is-global">global</span> The auto-updater validates the downloaded core (with an optional integrity pin) before running it, and button placement no longer leaves stray timers running as you navigate Jira.</li>
+                        <li><span class="changelog-tool-tag is-global">global</span> Click the version number (e.g. <code class="changelog-inline-code">v${AviatorShared.changelog.sharedVersion}</code>) next to any tool's title to reopen this changelog on demand.</li>
                     </ul>
                 </div>
             `;
@@ -130,6 +138,16 @@ const AviatorShared = {
     }
 
     .qase-text-muted { color: var(--text-muted); }
+
+    /* Version label in a modal title doubles as a "show changelog" link */
+    .qasePopup .qase-version-link {
+        cursor: pointer;
+    }
+
+    .qasePopup .qase-version-link:hover {
+        color: var(--primary);
+        text-decoration: underline;
+    }
 
     .qase-link {
         color: var(--primary);
@@ -1187,7 +1205,7 @@ const AviatorShared = {
             btn.id = 'qaseScrapeButton';
 
             const jiraCreateButton = document.querySelector('[data-testid="atlassian-navigation--create-button"]')
-            btn.classList = jiraCreateButton.classList
+            if (jiraCreateButton) btn.classList = jiraCreateButton.classList
 
             btn.style.marginLeft = '5px'
             btn.style.background = isDarkMode ? '#E2D988' : '#C77AF5';
@@ -1206,7 +1224,7 @@ const AviatorShared = {
             btn.id = 'qaseTraciatorButton';
 
             const jiraCreateButton = document.querySelector('[data-testid="atlassian-navigation--create-button"]')
-            btn.classList = jiraCreateButton.classList
+            if (jiraCreateButton) btn.classList = jiraCreateButton.classList
 
             btn.style.marginLeft = '5px'
             btn.style.background = isDarkMode ? '#F6A58B' : '#27AE1E';
@@ -1505,9 +1523,39 @@ const AviatorShared = {
             }
         };
 
+        // Single bounded poller for locating Jira's nav/issue chrome after a route
+        // change. Replaces ad-hoc setIntervals that ran forever when the target
+        // element never appeared. Only one poll runs at a time; it stops on success
+        // or after maxAttempts (~20s at 500ms) so navigating away can't leak timers.
+        let buttonPollInterval = null;
+        const stopButtonPoll = () => {
+            if (buttonPollInterval) {
+                clearInterval(buttonPollInterval);
+                buttonPollInterval = null;
+            }
+        };
+        const pollForButtonTarget = (tick, { intervalMs = 500, maxAttempts = 40 } = {}) => {
+            stopButtonPoll();
+            let attempts = 0;
+            buttonPollInterval = setInterval(() => {
+                attempts++;
+                let done = false;
+                try {
+                    done = tick() === true;
+                } catch (error) {
+                    console.error('❌ Error placing Aviator buttons:', error);
+                    done = true;
+                }
+                if (done || attempts >= maxAttempts) stopButtonPoll();
+            }, intervalMs);
+        };
+
         /** function: decides where to put the button */
         const handleLocationChange = () => {
             const url = window.location.href;
+
+            // Any previous route's poll is now stale.
+            stopButtonPoll();
 
             if (!isActiveBoardContext(url)) {
                 removeBoardiatorButtons();
@@ -1519,51 +1567,56 @@ const AviatorShared = {
 
             // Check for release report pages for Traciator button
             if (/\/projects\/[^\/]+\/versions\/\d+\/tab\/release-report-all-issues/.test(url)) {
-                const interval = setInterval(() => {
+                pollForButtonTarget(() => {
                     if (document.querySelector('[data-testid="atlassian-navigation--create-button"]')) {
                         insertTraciatorButtonInReleasePage();
-                        clearInterval(interval);
+                        return true;
                     }
-                }, 500);
+                    return false;
+                });
             } else if (/\/projects\/[^\/]+\/boards\/\d+(?:\?.*)?[?&]selectedIssue=/.test(url)) {
-                const interval = setInterval(() => {
+                pollForButtonTarget(() => {
                     if (document.querySelector('[data-testid="atlassian-navigation--create-button"]')) {
                         observeBoardButtonInPage();
                     }
                     if (document.querySelector('div#jira-issue-header')) {
                         insertAviatorButtonInModal();
-                        clearInterval(interval);
+                        return true;
                     }
-                    else if (document.querySelector('div[data-testid="issue.views.issue-details.issue-layout.compact-layout"]')) {
+                    if (document.querySelector('div[data-testid="issue.views.issue-details.issue-layout.compact-layout"]')) {
                         insertAviatorButtonInSidebar();
-                        clearInterval(interval);
+                        return true;
                     }
-                }, 500);
+                    return false;
+                });
             } else if (isActiveBoardContext(url)) {
-                const interval = setInterval(() => {
+                pollForButtonTarget(() => {
                     if (document.querySelector('[data-testid="atlassian-navigation--create-button"]')) {
                         observeBoardButtonInPage();
-                        clearInterval(interval);
+                        return true;
                     }
-                }, 500);
+                    return false;
+                });
             } else if (/\/browse\/[A-Z]+-\d+/.test(url)) {
-                const interval = setInterval(() => {
+                pollForButtonTarget(() => {
                     if (document.querySelector('div#jira-issue-header')) {
                         insertAviatorButtonInTicket();
-                        clearInterval(interval);
+                        return true;
                     }
-                }, 500);
+                    return false;
+                });
             } else if (/\/backlog\?.*selectedIssue=/.test(url)) {
-                const interval = setInterval(() => {
+                pollForButtonTarget(() => {
                     if (document.querySelector('div#jira-issue-header')) {
                         insertAviatorButtonInModal();
-                        clearInterval(interval);
+                        return true;
                     }
-                    else if (document.querySelector('div[data-testid="issue.views.issue-details.issue-layout.compact-layout"]')) {
+                    if (document.querySelector('div[data-testid="issue.views.issue-details.issue-layout.compact-layout"]')) {
                         insertAviatorButtonInSidebar();
-                        clearInterval(interval);
+                        return true;
                     }
-                }, 500);
+                    return false;
+                });
             }
         };
 
@@ -1605,6 +1658,7 @@ const AviatorShared = {
                     const payload = parsed ?? res.responseText
 
                     if (includeHttpInfo) {
+                        // Caller opted in to inspect the HTTP status itself.
                         resolve({
                             data: payload,
                             http: {
@@ -1613,6 +1667,21 @@ const AviatorShared = {
                                 responseHeaders: res.responseHeaders
                             }
                         });
+                        return;
+                    }
+
+                    // Treat non-2xx responses as failures. GM_xmlhttpRequest fires
+                    // onload for every completed response (including 4xx/5xx), so
+                    // without this check callers would treat error responses as success.
+                    const status = res.status;
+                    if (typeof status === 'number' && (status < 200 || status >= 300)) {
+                        const detail = (typeof payload === 'string')
+                            ? payload
+                            : (payload?.errorMessage || payload?.error || JSON.stringify(payload));
+                        const error = new Error(`HTTP ${status} ${res.statusText || ''}`.trim() + (detail ? `: ${detail}` : ''));
+                        error.status = status;
+                        error.response = payload;
+                        reject(error);
                         return;
                     }
 
@@ -1670,14 +1739,17 @@ const AviatorShared = {
             return true;
         },
 
-        generateTitlePlaceholder: function () {
-            const jiraDetails = AviatorShared.configuration.getJiraIssueDetails()
-            let title = window.aviator.qase.title ?? jiraDetails.issueKey
+        generateTitlePlaceholder: function (issueKey) {
+            const jiraDetails = AviatorShared.configuration.getJiraIssueDetails();
+            const resolvedKey = issueKey || jiraDetails.issueKey || '';
+            const resolvedTitle = jiraDetails.issueTitle || '';
 
-            title = title.replace('{issueKey}', jiraDetails.issueKey);
-            title = title.replace('{issueTitle}', jiraDetails.issueTitle);
+            // Fall back to the resolved key when no title template is configured.
+            const template = window.aviator?.qase?.title ?? resolvedKey;
 
-            return title;
+            return String(template ?? '')
+                .replace('{issueKey}', resolvedKey)
+                .replace('{issueTitle}', resolvedTitle);
         },
 
         getCurrentJiraIssueTypeName: function () {
@@ -1937,6 +2009,42 @@ const AviatorShared = {
     },
 
     qase: {
+        // Shared offset/limit/total pagination over a Qase list endpoint.
+        // buildUrl(limit, offset) returns the full request URL. Returns the
+        // accumulated (optionally mapped) entities, degrading to whatever was
+        // collected so far if a page fails or the response has no result.
+        fetchQasePaginated: async function (buildUrl, { mapEntity = (entity) => entity } = {}) {
+            const token = AviatorShared.configuration.getQaseApiToken();
+            const limit = 100;
+            const all = [];
+            let offset = 0;
+            let hasMore = true;
+
+            while (hasMore) {
+                let data;
+                try {
+                    data = await AviatorShared.api({
+                        method: 'GET',
+                        url: buildUrl(limit, offset),
+                        headers: { 'Accept': 'application/json', Token: token }
+                    });
+                } catch (error) {
+                    console.error('Error fetching paginated Qase data:', error);
+                    return all;
+                }
+
+                if (!data.result) return all;
+
+                all.push(...(data.result.entities || []).map(mapEntity));
+
+                const total = data.result.total;
+                offset += limit;
+                hasMore = offset < total;
+            }
+
+            return all;
+        },
+
         fetchTestCasesForJiraKeys: async function (projectCode, jiraKeys) {
             if (!jiraKeys || jiraKeys.length === 0) return [];
 
@@ -2283,12 +2391,18 @@ const AviatorShared = {
             const token = AviatorShared.configuration.getQaseApiToken();
             const projectCode = AviatorShared.configuration.getQaseProjectCode();
 
-            const data = await AviatorShared.api({
-                method: 'GET', url: `https://api.qase.io/v1/project/${projectCode}`,
-                headers: { Token: token }
-            });
+            try {
+                const data = await AviatorShared.api({
+                    method: 'GET', url: `https://api.qase.io/v1/project/${projectCode}`,
+                    headers: { Token: token }
+                });
 
-            return (!data.status || data.status === false);;
+                // Returns true when the connection is BROKEN (callers show an error in that case).
+                return (!data.status || data.status === false);
+            } catch (error) {
+                console.warn('Qase connection check failed:', error);
+                return true;
+            }
         },
 
         fetchQaseTestPlanDetails: async function (projectCode, planId) {
@@ -2333,35 +2447,10 @@ const AviatorShared = {
         },
 
         fetchQaseTestCases: async function (projectCode, issueKey) {
-            const token = AviatorShared.configuration.getQaseApiToken();
-
-            let allCases = [];
-            let offset = 0;
-            const limit = 100;
-            let hasMore = true;
-
-            while (hasMore) {
-                const data = await AviatorShared.api({
-                    method: 'GET',
-                    url: `https://api.qase.io/v1/case/${projectCode}?external_issues[type]=jira-cloud&external_issues[ids][]=${issueKey}&limit=${limit}&offset=${offset}`,
-                    headers: { Token: token }
-                });
-
-                if (!data.result) {
-                    return allCases;
-                }
-
-                // Add current page of cases to our collection
-                const caseItems = data.result.entities.map(e => ({ id: e.id, title: e.title }));
-                allCases.push(...caseItems);
-
-                // Check if we have more pages to fetch
-                const total = data.result.total;
-                offset += limit;
-                hasMore = offset < total;
-            }
-
-            return allCases;
+            return AviatorShared.qase.fetchQasePaginated(
+                (limit, offset) => `https://api.qase.io/v1/case/${projectCode}?external_issues[type]=jira-cloud&external_issues[ids][]=${issueKey}&limit=${limit}&offset=${offset}`,
+                { mapEntity: (e) => ({ id: e.id, title: e.title }) }
+            );
         },
 
         fetchQaseTestPlans: async function () {
@@ -2383,78 +2472,34 @@ const AviatorShared = {
         },
 
         fetchQaseEnvironments: async function () {
-            const token = AviatorShared.configuration.getQaseApiToken();
             const projectCode = AviatorShared.configuration.getQaseProjectCode();
-
-            let allEnvironments = [];
-            let offset = 0;
-            const limit = 100;
-            let hasMore = true;
-
-            while (hasMore) {
-                const data = await AviatorShared.api({
-                    method: 'GET',
-                    url: `https://api.qase.io/v1/environment/${projectCode}?limit=${limit}&offset=${offset}`,
-                    headers: { 'Accept': 'application/json', token: token }
-                });
-
-                if (!data.result) {
-                    return allEnvironments;
-                }
-
-                // Add current page of environments to our collection
-                allEnvironments.push(...data.result.entities);
-
-                // Check if we have more pages to fetch
-                const total = data.result.total;
-                offset += limit;
-                hasMore = offset < total;
-            }
-
-            return allEnvironments;
+            return AviatorShared.qase.fetchQasePaginated(
+                (limit, offset) => `https://api.qase.io/v1/environment/${projectCode}?limit=${limit}&offset=${offset}`
+            );
         },
 
         fetchQaseMilestones: async function () {
-            const token = AviatorShared.configuration.getQaseApiToken();
             const projectCode = AviatorShared.configuration.getQaseProjectCode();
-
-            let allMilestones = [];
-            let offset = 0;
-            const limit = 100;
-            let hasMore = true;
-
-            while (hasMore) {
-                const data = await AviatorShared.api({
-                    method: 'GET',
-                    url: `https://api.qase.io/v1/milestone/${projectCode}?limit=${limit}&offset=${offset}`,
-                    headers: { 'Accept': 'application/json', token: token }
-                });
-
-                if (!data.result) {
-                    return allMilestones;
-                }
-
-                // Add current page of milestones to our collection
-                allMilestones.push(...data.result.entities);
-
-                // Check if we have more pages to fetch
-                const total = data.result.total;
-                offset += limit;
-                hasMore = offset < total;
-            }
-
-            return allMilestones;
+            return AviatorShared.qase.fetchQasePaginated(
+                (limit, offset) => `https://api.qase.io/v1/milestone/${projectCode}?limit=${limit}&offset=${offset}`
+            );
         },
 
         fetchQaseConfigurations: async function () {
             const token = AviatorShared.configuration.getQaseApiToken();
             const projectCode = AviatorShared.configuration.getQaseProjectCode();
 
-            const data = await AviatorShared.api({
-                method: 'GET',
-                url: `https://api.qase.io/v1/configuration/${projectCode}`,
-                headers: { 'Accept': 'application/json', token: token }
-            })
+            let data;
+            try {
+                data = await AviatorShared.api({
+                    method: 'GET',
+                    url: `https://api.qase.io/v1/configuration/${projectCode}`,
+                    headers: { 'Accept': 'application/json', token: token }
+                })
+            } catch (error) {
+                console.error('Error fetching Qase configurations:', error);
+                return []
+            }
 
             if (!data.result) {
                 return []
@@ -2545,7 +2590,7 @@ const AviatorShared = {
             }
 
             try {
-                await AviatorShared.api({
+                const result = await AviatorShared.api({
                     method: 'POST',
                     url: `https://api.qase.io/v1/run/${projectCode}/external-issue`,
                     headers: {
@@ -2557,6 +2602,12 @@ const AviatorShared = {
                         links: [{ run_id: runId, external_issue: issueKey }]
                     }
                 });
+
+                // Qase can answer 2xx with { status: false } on a logical failure.
+                if (result && result.status === false) {
+                    const msg = result.errorMessage || result.error || 'Qase reported the association failed';
+                    throw new Error(msg);
+                }
 
                 return { status: 'linked', issueKey, message: `Linked to Jira issue ${issueKey}` };
             }
@@ -2602,16 +2653,20 @@ const AviatorShared = {
                 teamCityQueued: data.tcBuilds.join(','),
             }
 
-            await AviatorShared.api({
-                method: 'POST',
-                url: url,
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                data: payload
-            })
-
+            // Usage tracking only — never let a Slack failure break the run flow.
+            try {
+                await AviatorShared.api({
+                    method: 'POST',
+                    url: url,
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    data: payload
+                })
+            } catch (error) {
+                console.warn('Slack usage tracking failed (non-fatal):', error);
+            }
         }
     },
 
@@ -2819,7 +2874,8 @@ const AviatorShared = {
                 // Add build URL link if provided and status is success
                 if (buildUrl && status === 'success') {
                     const buildName = statusRow.querySelector('.build-name');
-                    buildName.innerHTML = `<a href="${buildUrl}" target="_blank" rel="noopener noreferrer" class="qase-link">${buildName.textContent}</a>`;
+                    const esc = AviatorShared.util.escapeHtml;
+                    buildName.innerHTML = `<a href="${esc(buildUrl)}" target="_blank" rel="noopener noreferrer" class="qase-link">${esc(buildName.textContent)}</a>`;
                 }
             }
 
@@ -3082,6 +3138,17 @@ const AviatorShared = {
     },
 
     util: {
+        // Escape a value for safe interpolation into HTML text or attributes.
+        // Use whenever server/scraped data is placed into an innerHTML template.
+        escapeHtml: function (value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        },
+
         singleFlight: function (key, fn) {
             if (!key) throw new Error('singleFlight requires a key');
             if (typeof fn !== 'function') throw new Error('singleFlight requires a function');
@@ -3336,6 +3403,17 @@ const AviatorShared = {
 
             overlay.appendChild(modalContainer);
 
+            // Any version label in the title (class "qase-version-link") opens the
+            // changelog on demand. Centralized here so it works for every modal.
+            modalContainer.querySelectorAll('.qase-version-link').forEach((el) => {
+                if (!el.title) el.title = 'View Qasiator Tools changelog';
+                el.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    AviatorShared.changelog.showToolPopup();
+                });
+            });
+
             let isClosed = false;
             let removeEscListener = null;
 
@@ -3456,6 +3534,7 @@ const AviatorShared = {
 
         showStatusModal: function (builds, options = {}) {
             const { summary = null, notification = null, closeParentPopup = false, onClose = null } = options;
+            const esc = AviatorShared.util.escapeHtml;
 
             const buildsArray = builds ? Array.from(builds) : [];
             const buildCount = buildsArray.length;
@@ -3535,9 +3614,9 @@ const AviatorShared = {
                         <div class="status-summary-icon">✅</div>
                         <div class="status-summary-content">
                             <div class="status-summary-title">Created successfully</div>
-                            ${summary.title ? `<div id="status-modal-summary-title" class="status-summary-run-title">${summary.title}</div>` : ''}
-                            ${metaLine ? `<div id="status-modal-summary-subline" class="status-summary-subline">${metaLine}</div>` : ''}
-                            ${summary.associationMessage ? `<div id="status-modal-summary-association" class="status-association ${associationClass}">${summary.associationMessage}</div>` : ''}
+                            ${summary.title ? `<div id="status-modal-summary-title" class="status-summary-run-title">${esc(summary.title)}</div>` : ''}
+                            ${metaLine ? `<div id="status-modal-summary-subline" class="status-summary-subline">${esc(metaLine)}</div>` : ''}
+                            ${summary.associationMessage ? `<div id="status-modal-summary-association" class="status-association ${associationClass}">${esc(summary.associationMessage)}</div>` : ''}
                         </div>
                     </div>
                 `;
@@ -3556,9 +3635,9 @@ const AviatorShared = {
                 notificationBlock.innerHTML = `
                     <div class="status-summary-row">
                         <div class="status-summary-content">
-                            ${note.title ? `<div id="status-modal-title" class="status-summary-title">${note.title}</div>` : ''}
-                            ${note.message ? `<div id="status-modal-message" class="status-summary-run-title">${note.message}</div>` : ''}
-                            ${note.detail ? `<div id="status-modal-detail" class="status-summary-subline">${note.detail}</div>` : ''}
+                            ${note.title ? `<div id="status-modal-title" class="status-summary-title">${esc(note.title)}</div>` : ''}
+                            ${note.message ? `<div id="status-modal-message" class="status-summary-run-title">${esc(note.message)}</div>` : ''}
+                            ${note.detail ? `<div id="status-modal-detail" class="status-summary-subline">${esc(note.detail)}</div>` : ''}
                         </div>
                     </div>
                 `;
@@ -3593,8 +3672,8 @@ const AviatorShared = {
                             <div class="qase-mini-spinner"></div>
                         </div>
                         <div class="status-build-meta">
-                            <div class="build-name">${buildName}</div>
-                            <div class="build-id">${buildId}</div>
+                            <div class="build-name">${esc(buildName)}</div>
+                            <div class="build-id">${esc(buildId)}</div>
                         </div>
                         <div class="status-message">Waiting...</div>
                     `;
@@ -3778,16 +3857,17 @@ const AviatorShared = {
                             <input type="text" class="multi-select-search" placeholder="Filter test plans..." aria-label="Filter test plans">
                         </div>
                         ${plans.map(plan => {
+                const esc = AviatorShared.util.escapeHtml;
                 const caseCount = plan.caseIds?.length || plan.cases_count || 0;
                 const qaseItemClass = includeQaseItemClass ? ' class="qase-item"' : '';
                 const dataType = includeQaseItemClass ? ' data-type="plan"' : '';
-                const dataIds = includeDataIds && plan.caseIds ? ` data-ids="${plan.caseIds.join(',')}"` : '';
+                const dataIds = includeDataIds && plan.caseIds ? ` data-ids="${esc(plan.caseIds.join(','))}"` : '';
 
                 return `
                                 <label class="multi-select-option">
-                                    <input type="checkbox"${qaseItemClass}${dataType}${dataIds} value="${plan.id}" data-title="${plan.title}" data-cases="${caseCount}">
-                                    <span class="plan-title">${plan.title}</span>
-                                    <span class="plan-cases">(${caseCount} case${caseCount === 1 ? '' : 's'})</span>
+                                    <input type="checkbox"${qaseItemClass}${dataType}${dataIds} value="${esc(plan.id)}" data-title="${esc(plan.title)}" data-cases="${esc(caseCount)}">
+                                    <span class="plan-title">${esc(plan.title)}</span>
+                                    <span class="plan-cases">(${esc(caseCount)} case${caseCount === 1 ? '' : 's'})</span>
                                 </label>
                             `;
             }).join('')}
@@ -3981,10 +4061,11 @@ const AviatorShared = {
                 return div;
             }
 
+            const esc = AviatorShared.util.escapeHtml;
             let html = `<h3>🔗 Linked Test Cases</h3>`
             externalCases.forEach((item) => {
                 html += `<label>
-                        <input type="checkbox" class="qase-item" id="test-case-item-${item.id}" data-type="case" data-ids="${item.id}"> #${item.id} - ${item.title}
+                        <input type="checkbox" class="qase-item" id="test-case-item-${esc(item.id)}" data-type="case" data-ids="${esc(item.id)}"> #${esc(item.id)} - ${esc(item.title)}
                     </label>`;
             });
 
@@ -3997,10 +4078,12 @@ const AviatorShared = {
             const div = document.createElement('div')
             div.id = 'test-run-configuration-section'
 
+            const esc = AviatorShared.util.escapeHtml;
+
             let jiraKeySection = '';
             if (availableJiraKeys && availableJiraKeys.length > 0) {
                 const jiraOptions = availableJiraKeys
-                    .map(jira => `<option value="${jira.key}">${jira.key} - ${jira.name}</option>`)
+                    .map(jira => `<option value="${esc(jira.key)}">${esc(jira.key)} - ${esc(jira.name)}</option>`)
                     .join('');
 
                 jiraKeySection = `
@@ -4046,7 +4129,7 @@ const AviatorShared = {
                 env.innerHTML = `<label>Environment</label>
                             <select id="qaseEnv">
                                 <option value=""></option>
-                                ${qaseConfigData.environments.map(env => `<option value="${env.id}">${env.title}</option>`).join('')}
+                                ${qaseConfigData.environments.map(env => `<option value="${esc(env.id)}">${esc(env.title)}</option>`).join('')}
                             </select>`
                 grid.appendChild(env)
             }
@@ -4056,7 +4139,7 @@ const AviatorShared = {
                 milestone.innerHTML = `<label>Milestone</label>
                             <select id="qaseMilestone">
                                 <option value=""></option>
-                                ${qaseConfigData.milestones.map(ms => `<option value="${ms.id}">${ms.title}</option>`).join('')}
+                                ${qaseConfigData.milestones.map(ms => `<option value="${esc(ms.id)}">${esc(ms.title)}</option>`).join('')}
                             </select>`
                 grid.appendChild(milestone)
             }
@@ -4064,10 +4147,10 @@ const AviatorShared = {
             if (qaseConfigData.configurations) {
                 qaseConfigData.configurations.forEach(entity => {
                     const _div = document.createElement('div')
-                    _div.innerHTML = `<label>${entity.title}</label>
-                            <select class="qaseConfig" id="qaseConfiguration-${entity.title}" data-entity-id="${entity.id}">
+                    _div.innerHTML = `<label>${esc(entity.title)}</label>
+                            <select class="qaseConfig" id="qaseConfiguration-${esc(entity.title)}" data-entity-id="${esc(entity.id)}">
                                 <option value=""></option>
-                                 ${entity.configurations.map(cfg => `<option value="${cfg.id}">${cfg.title}</option>`).join('')}
+                                 ${entity.configurations.map(cfg => `<option value="${esc(cfg.id)}">${esc(cfg.title)}</option>`).join('')}
                             </select>`
                     grid.appendChild(_div)
                 });
@@ -4171,8 +4254,7 @@ const AviatorShared = {
 
             const summaryP = document.createElement('p');
             summaryP.style.margin = '0';
-            summaryP.textContent = `This test run will include ${qaseIdsList.length} test cases identified from ${sourceLabel}.`;
-            summaryP.innerHTML = `This test run will include <strong>${qaseIdsList.length} test cases</strong> identified from ${sourceLabel}.`;
+            summaryP.innerHTML = `This test run will include <strong>${qaseIdsList.length} test cases</strong> identified from ${AviatorShared.util.escapeHtml(sourceLabel)}.`;
 
             summaryCard.appendChild(summaryP);
             summaryWrap.appendChild(summaryCard);
@@ -4204,7 +4286,7 @@ const AviatorShared = {
                 const column2 = document.createElement('div');
                 column2.classList.add('popup-column');
                 column2.style.flex = '1';
-                const tcElement = AviatorShared.html.htmlTeamCityBuilds(tcBuildDetails, false);
+                const tcElement = AviatorShared.html.htmlTeamCityBuilds(tcBuildDetails);
                 column2.appendChild(tcElement);
                 popupBody.appendChild(column2);
 

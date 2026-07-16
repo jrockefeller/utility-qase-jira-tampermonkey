@@ -1,6 +1,4 @@
 const Boardiator = {
-    version: '2.0.0',
-
     showBoardiatorFeaturePopup: function () {
         AviatorShared.changelog.showToolPopup('boardiator');
     },
@@ -232,7 +230,6 @@ const Boardiator = {
                     allDistinctTestCaseIds,
                     {
                         toolName: 'Boardiator',
-                        version: Boardiator.version,
                         showFeaturePopup: false,
                         source: 'boardiator',
                         defaultTitle: `${boardMetadata.boardTitle} Verification`,

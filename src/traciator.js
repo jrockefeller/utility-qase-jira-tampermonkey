@@ -2,8 +2,6 @@
 // Traciator Workflow v1.0.0
 
 const Traciator = {
-    version: '2.0.0',
-
     showTraciatorFeaturePopup: function () {
         AviatorShared.changelog.showToolPopup('traciator');
     },
@@ -116,9 +114,10 @@ const Traciator = {
         AviatorShared.jira.blockJiraShortcuts();
 
         const toolName = options?.toolName || 'Traciator';
-        const toolVersion = options?.version || Traciator.version;
         const showFeaturePopup = options?.showFeaturePopup !== false;
         const projectCode = options?.projectCode || AviatorShared.configuration.getQaseProjectCode();
+
+        const esc = AviatorShared.util.escapeHtml;
 
         const container = document.createElement('div');
         container.className = 'qasePopup traciator-report-popup';
@@ -134,7 +133,7 @@ const Traciator = {
                 <div class="traciator-titlebar">
                     <div class="traciator-title">
                         <h2>${toolName}</h2>
-                        <small>v${toolVersion}</small>
+                        <small class="qase-version-link">v${AviatorShared.changelog.sharedVersion}</small>
                     </div>
                     <button id="closeTraceabilityModal" class="qase-icon-btn" type="button">&times;</button>
                 </div>
@@ -232,14 +231,14 @@ const Traciator = {
                     const maxLength = 40;
                     const displayTitle = title.length > maxLength ? title.substring(0, maxLength - 3) + '...' : title;
                     const runUrl = projectCode && run.id
-                        ? `https://app.qase.io/run/${projectCode}/dashboard/${run.id}`
+                        ? `https://app.qase.io/run/${encodeURIComponent(projectCode)}/dashboard/${encodeURIComponent(run.id)}`
                         : null;
                     const runTitleHtml = runUrl
-                        ? `<a href="${runUrl}" target="_blank" rel="noopener noreferrer">${displayTitle}</a>`
-                        : displayTitle;
+                        ? `<a href="${esc(runUrl)}" target="_blank" rel="noopener noreferrer">${esc(displayTitle)}</a>`
+                        : esc(displayTitle);
 
                     return `<div class="traciator-run-item">
-                                <div id="testRun-${run.id}" class="traciator-run-title">${runTitleHtml} <span class="traciator-run-summary">${resultSummary}</span></div>
+                                <div id="testRun-${esc(run.id)}" class="traciator-run-title">${runTitleHtml} <span class="traciator-run-summary">${esc(resultSummary)}</span></div>
                             </div>`;
                 })
                 .join('');
@@ -247,12 +246,12 @@ const Traciator = {
             return `
                                     <tr class="traciator-tr">
                                         <td class="traciator-td">
-                                            <a class="traciator-jira-link" href="https://paylocity.atlassian.net/browse/${item.jiraKey}" target="_blank">${item.jiraKey}</a>
+                                            <a class="traciator-jira-link" href="https://paylocity.atlassian.net/browse/${encodeURIComponent(item.jiraKey)}" target="_blank">${esc(item.jiraKey)}</a>
                                         </td>
                                         <td class="traciator-td">
-                                            <span class="traciator-badge ${statusClass}">${item.coverage}</span>
+                                            <span class="traciator-badge ${statusClass}">${esc(item.coverage)}</span>
                                         </td>
-                                        <td class="traciator-td wrap">${item.jiraName || 'Unknown Issue'}</td>
+                                        <td class="traciator-td wrap">${esc(item.jiraName || 'Unknown Issue')}</td>
                                         <td class="traciator-td center">${item.testCases.length}</td>
                                         <td class="traciator-td center">${item.testRuns.length}</td>
                                         <td class="traciator-td muted">${recentRuns || '<div class="traciator-no-runs">No recent runs</div>'}</td>
@@ -578,8 +577,19 @@ const Traciator = {
             ]);
         });
 
+        // Guard against CSV formula injection: a cell beginning with = + - @ (or
+        // tab/CR) can execute as a formula when opened in Excel/Sheets. Prefix any
+        // such cell with a single quote so it's treated as literal text.
+        const sanitizeCsvCell = (value) => {
+            let str = String(value ?? '');
+            if (/^[=+\-@\t\r]/.test(str)) {
+                str = `'${str}`;
+            }
+            return str.replace(/"/g, '""');
+        };
+
         const csvContent = csvData.map(row =>
-            row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+            row.map(cell => `"${sanitizeCsvCell(cell)}"`).join(',')
         ).join('\n');
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -587,10 +597,6 @@ const Traciator = {
         link.href = URL.createObjectURL(blob);
         link.download = `traceability_report_${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
-    },
-
-    exportTraceabilityToCSVfunction: function (traceabilityMapping) {
-        return Traciator.exportTraceabilityToCSV(traceabilityMapping);
     },
 
     compileTestRunData: async function (traceabilityMapping, allDistinctTestCaseIds = [], options = {}) {
@@ -627,10 +633,6 @@ const Traciator = {
             sourceLabel: options?.sourceLabel || 'the traceability report',
             onCreateRun: Traciator.createTraceabilityTestRunWithData
         });
-    },
-
-    complileTestRunData: async function (traceabilityMapping, allDistinctTestCaseIds = []) {
-        return Traciator.compileTestRunData(traceabilityMapping, allDistinctTestCaseIds);
     },
 
     showTraceabilityTestRunModal: async function (qaseIdsList, qaseConfigData, availableJiraKeys = [], traceabilityMapping = {}, options = {}) {
